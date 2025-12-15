@@ -40,6 +40,8 @@ O frontend é uma aplicação **Next.js 14** que fornece:
 
 ```
 frontend/
+├── .env.local               # Variáveis de ambiente (não comitado)
+├── next.config.js           # Configuração do Next.js (CORS/Env)
 ├── docs/                    # Documentação
 ├── public/                  # Assets estáticos
 │   ├── pg-logo.png
@@ -66,6 +68,20 @@ frontend/
 │       └── globals.css     # Estilos globais
 └── package.json
 ```
+
+
+---
+
+## Configuração
+
+### Variáveis de Ambiente (`.env.local`)
+
+| Variável | Descrição | Exemplo Prod | Exemplo Local |
+|----------|-----------|--------------|---------------|
+| `NEXT_PUBLIC_API_URL` | URL base da Azure Function | `https://func-app.azurewebsites.net/api` | `http://localhost:7071/api` |
+| `NEXT_PUBLIC_FUNCTION_KEY` | Chave de acesso (header) | `h8d9f...` | (vazio) |
+
+> **Nota**: `next.config.js` é usado para expor essas variáveis ao runtime do browser e garantir headers de segurança.
 
 ---
 

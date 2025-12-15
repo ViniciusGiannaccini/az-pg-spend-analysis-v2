@@ -51,6 +51,50 @@ O arquivo de treino cobre 8 categorias N4:
 
 > ⚠️ **O servidor precisa ser reiniciado após o treinamento** para carregar o novo modelo ML. Isso é porque o modelo é cacheado em memória.
 
+
+## Rodando Localmente
+
+### Backend (Azure Functions)
+1. Instale o [Azure Functions Core Tools](https://learn.microsoft.com/en-us/azure/azure-functions/functions-run-local).
+2. Vá para a pasta raiz `az-pg-spend-analysis`.
+3. Crie um arquivo `local.settings.json` com suas credenciais.
+4. Inicie o servidor:
+   ```bash
+   func start
+   ```
+
+### Frontend (Next.js)
+1. Vá para a pasta `frontend`.
+2. Instale as dependências: `npm install`.
+3. Crie um arquivo `.env.local` e configure:
+   ```
+   NEXT_PUBLIC_API_URL=http://localhost:7071/api
+   NEXT_PUBLIC_FUNCTION_KEY= (vazio localmente)
+   ```
+4. Inicie o servidor:
+   ```bash
+   npm run dev
+   ```
+
+## Deploy
+
+### 1. Backend (Azure Functions)
+**Importante**: As rotas agora são `AuthLevel.ANONYMOUS` para permitir CORS sem problemas. A segurança deve ser gerenciada via configurações de rede da Azure ou API Gateway se necessário.
+
+1. Login na Azure: `az login`
+2. Deploy via CLI:
+   ```bash
+   func azure functionapp publish <NOME_DA_SUA_FUNCTION_APP>
+   ```
+   *Nota: O arquivo `.funcignore` já está configurado para incluir a pasta `models` e excluir dados de treinamento brutos.*
+
+### 2. Frontend (Vercel)
+1. Instale a Vercel CLI: `npm i -g vercel`
+2. Na pasta raiz, rode: `vercel`
+3. Configure as variáveis de ambiente na Vercel:
+   - `NEXT_PUBLIC_API_URL`: URL da sua Azure Function (ex: `https://sua-function.azurewebsites.net/api`)
+   - `NEXT_PUBLIC_FUNCTION_KEY`: Sua System Key da Azure Function (embora as rotas sejam anônimas, o front ainda envia o header).
+
 ## Limpeza
 
 Para restaurar o modelo original após o demo, delete a versão criada na aba **Gerenciar Modelos**.

@@ -1,5 +1,16 @@
 [
   {
+    "version_id": "v_2",
+    "timestamp": "2025-12-15T14:13:13.067367",
+    "filename": "demo_treino_empresa_x.xlsx",
+    "metrics": {
+      "accuracy": 0.763,
+      "f1_macro": 0.6064,
+      "total_samples": 9742
+    },
+    "status": "active"
+  },
+  {
     "version_id": "v_1",
     "timestamp": "2025-12-15T10:17:58.051428",
     "filename": "Bernoulli_Final.xlsx (original)",
@@ -8,6 +19,6 @@
       "f1_macro": 0.8075,
       "total_samples": 9644
     },
-    "status": "active"
+    "status": "inactive"
   }
 ]

@@ -6,7 +6,11 @@ A Azure Function expõe 8 endpoints HTTP para classificação, treinamento e ger
 
 **Base URL**: `https://<function-app>.azurewebsites.net/api`
 
-Todos os endpoints suportam CORS (`Access-Control-Allow-Origin: *`).
+### Autenticação e CORS
+Todos os endpoints foram configurados como `AuthLevel.ANONYMOUS` para garantir total compatibilidade com **CORS** (Cross-Origin Resource Sharing) nos navegadores.
+
+- **CORS**: `Access-Control-Allow-Origin: *` é retornado em todas as respostas.
+- **API Key**: O frontend envia o header `x-functions-key` por padrão, mas a verificação estrita na gateway da Azure está desabilitada para permitir preflight requests (`OPTIONS`). A segurança deve ser tratada via VNET ou IP Restriction se necessário.
 
 ---
 
