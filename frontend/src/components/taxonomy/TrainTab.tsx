@@ -62,7 +62,6 @@ export default function TrainTab({
                     sector={sector}
                     trainingResult={trainingResult}
                     onTrainAnother={onCancelTraining}
-                    onTrainAnother={onCancelTraining}
                 />
             )}
         </div>
