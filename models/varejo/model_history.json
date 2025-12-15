@@ -1,0 +1,13 @@
+[
+  {
+    "version_id": "v_1",
+    "timestamp": "2025-12-15T02:25:48.721194",
+    "filename": "Base_Dengo_Final.xlsx (COM duplicatas)",
+    "metrics": {
+      "accuracy": 0.966,
+      "f1_macro": 0.8587,
+      "total_samples": 43715
+    },
+    "status": "active"
+  }
+]

@@ -1,0 +1,13 @@
+[
+  {
+    "version_id": "v_1",
+    "timestamp": "2025-12-15T10:17:58.051428",
+    "filename": "Bernoulli_Final.xlsx (original)",
+    "metrics": {
+      "accuracy": 0.893,
+      "f1_macro": 0.8075,
+      "total_samples": 9644
+    },
+    "status": "active"
+  }
+]

@@ -1,0 +1,55 @@
+# ==== PYTHON / BACKEND ====
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Pytest cache
+.pytest_cache/
+
+# Local settings (contains secrets)
+local.settings.json
+
+# ==== NODE / FRONTEND ====
+node_modules/
+.next/
+out/
+dist/
+
+# Environment files (may contain secrets)
+.env
+.env.local
+.env.*.local
+
+# ==== ML MODELS ====
+# Include model artifacts but exclude large training data
+models/*/dataset_master.csv
+models/*/versions/
+
+# ==== IDE / EDITOR ====
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# ==== AZURE FUNCTIONS ====
+# Azurite local storage emulator
+__blobstorage__/
+__queuestorage__/
+__azurite_db*__.json
+
+# ==== LOGS ====
+*.log
+npm-debug.log*
+
+# ==== TEST ARTIFACTS ====
+playwright-report/
+test-results/
+coverage/

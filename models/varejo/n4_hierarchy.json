@@ -1,0 +1,944 @@
+{
+  "Manteiga de Cacau": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Derivados de Cacau",
+    "N4": "Manteiga de Cacau"
+  },
+  "Filtro Industrial": {
+    "N1": "Indiretos",
+    "N2": "MRO - Manuntenção, Reparo e Operação",
+    "N3": "Filtragem e Purificação",
+    "N4": "Filtro Industrial"
+  },
+  "Panetone": {
+    "N1": "Diretos",
+    "N2": "Industrialização",
+    "N3": "Terceirização de Produção",
+    "N4": "Panetone"
+  },
+  "Cacau Seco e Fermentado": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Cacau Seco e Fermentado",
+    "N4": "Cacau Seco e Fermentado"
+  },
+  "Massa Branca": {
+    "N1": "Diretos",
+    "N2": "Industrialização",
+    "N3": "Terceirização de Produção",
+    "N4": "Massa Branca"
+  },
+  "Sacola Kraft": {
+    "N1": "Diretos",
+    "N2": "Embalagens",
+    "N3": "Sacola Kraft",
+    "N4": "Sacola Kraft"
+  },
+  "Callets": {
+    "N1": "Diretos",
+    "N2": "Industrialização",
+    "N3": "Terceirização de Produção",
+    "N4": "Callets"
+  },
+  "Caixas e Cartuchos Papel": {
+    "N1": "Diretos",
+    "N2": "Embalagens",
+    "N3": "Caixas e Cartuchos",
+    "N4": "Caixas e Cartuchos Papel"
+  },
+  "Leite em Pó Integral": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Leites e Derivados",
+    "N4": "Leite em Pó Integral"
+  },
+  "Caixas de Palelão": {
+    "N1": "Diretos",
+    "N2": "Embalagens",
+    "N3": "Caixa de Transporte",
+    "N4": "Caixas de Palelão"
+  },
+  "Serviços de Limpeza": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Limpeza e Conservação",
+    "N4": "Serviços de Limpeza"
+  },
+  "Licenças": {
+    "N1": "Indiretos",
+    "N2": "Tecnologia da Informação",
+    "N3": "Software e Licenciamento",
+    "N4": "Licenças"
+  },
+  "Serviços Advocatícios": {
+    "N1": "Indiretos",
+    "N2": "Serviços Especializados",
+    "N3": "Serviços Jurídicos",
+    "N4": "Serviços Advocatícios"
+  },
+  "Serviços de Suporte": {
+    "N1": "Indiretos",
+    "N2": "Tecnologia da Informação",
+    "N3": "Serviços de TI",
+    "N4": "Serviços de Suporte"
+  },
+  "Frutas Processadas (desidratadas, glaceadas, polpas)": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Frutas",
+    "N4": "Frutas Processadas (desidratadas, glaceadas, polpas)"
+  },
+  "Tecido": {
+    "N1": "Diretos",
+    "N2": "Embalagens",
+    "N3": "Embalagem Tecido",
+    "N4": "Tecido"
+  },
+  "Mão de obra terceiros": {
+    "N1": "Indiretos",
+    "N2": "Recursos Humanos e Treinamentos",
+    "N3": "Serviço de Mão Obra Terceiro",
+    "N4": "Mão de obra terceiros"
+  },
+  "Plano de Saúde": {
+    "N1": "Indiretos",
+    "N2": "Recursos Humanos e Treinamentos",
+    "N3": "Benefícios",
+    "N4": "Plano de Saúde"
+  },
+  "Consultorias Estratégicas ": {
+    "N1": "Indiretos",
+    "N2": "Serviços Especializados",
+    "N3": "Serviços de Consultoria",
+    "N4": "Consultorias Estratégicas "
+  },
+  "Leite em Pó Desnatado": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Leites e Derivados",
+    "N4": "Leite em Pó Desnatado"
+  },
+  "Eletrodomésticos": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Equipamentos e Eletrodomésticos",
+    "N4": "Eletrodomésticos"
+  },
+  "Frete Rodoviário - Outbound": {
+    "N1": "Indiretos",
+    "N2": "Logística",
+    "N3": "Transporte",
+    "N4": "Frete Rodoviário - Outbound"
+  },
+  "Obras": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Obras",
+    "N4": "Obras"
+  },
+  "Alugueis": {
+    "N1": "Serviços Não Negociáveis",
+    "N2": "Alugueis",
+    "N3": "Alugueis",
+    "N4": "Alugueis"
+  },
+  "Ferramentas e Equipamentos": {
+    "N1": "Indiretos",
+    "N2": "MRO - Manuntenção, Reparo e Operação",
+    "N3": "Ferramentas e Equipamentos",
+    "N4": "Ferramentas e Equipamentos"
+  },
+  "Café Consumo": {
+    "N1": "Diretos",
+    "N2": "Produto Acabado",
+    "N3": "Cafeteria",
+    "N4": "Café Consumo"
+  },
+  "Impressos": {
+    "N1": "Diretos",
+    "N2": "Embalagens",
+    "N3": "Tags e Impressos",
+    "N4": "Impressos"
+  },
+  "Condominio, IPTU Taxas imóveis": {
+    "N1": "Serviços Não Negociáveis",
+    "N2": "Condominio, IPTU Taxas imóveis",
+    "N3": "Condominio, IPTU Taxas imóveis",
+    "N4": "Condominio, IPTU Taxas imóveis"
+  },
+  "Agua": {
+    "N1": "Diretos",
+    "N2": "Produto Acabado",
+    "N3": "Bebidas",
+    "N4": "Agua"
+  },
+  "Comunicação": {
+    "N1": "Indiretos",
+    "N2": "Marketing e Comunicação",
+    "N3": "Publicidade e Propaganda",
+    "N4": "Comunicação"
+  },
+  "Auxilios e Vales": {
+    "N1": "Indiretos",
+    "N2": "Recursos Humanos e Treinamentos",
+    "N3": "Benefícios",
+    "N4": "Auxilios e Vales"
+  },
+  "Material de Limpeza": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Limpeza e Conservação",
+    "N4": "Material de Limpeza"
+  },
+  "Licor de Cacau": {
+    "N1": "Diretos",
+    "N2": "Produto Acabado",
+    "N3": "Bebidas",
+    "N4": "Licor de Cacau"
+  },
+  "Frutas Liofilizadas": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Frutas",
+    "N4": "Frutas Liofilizadas"
+  },
+  "Caixas Rigidas": {
+    "N1": "Diretos",
+    "N2": "Embalagens",
+    "N3": "Caixas e Cartuchos",
+    "N4": "Caixas Rigidas"
+  },
+  "Gin": {
+    "N1": "Diretos",
+    "N2": "Produto Acabado",
+    "N3": "Bebidas",
+    "N4": "Gin"
+  },
+  "Castanha de Caju": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Oleaginosas",
+    "N4": "Castanha de Caju"
+  },
+  "Latas": {
+    "N1": "Diretos",
+    "N2": "Embalagens",
+    "N3": "Embalagem Aluminio",
+    "N4": "Latas"
+  },
+  "Mídia Online": {
+    "N1": "Indiretos",
+    "N2": "Marketing e Comunicação",
+    "N3": "Publicidade e Propaganda",
+    "N4": "Mídia Online"
+  },
+  "Copa e Cozinha": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Materiais de Consumo",
+    "N4": "Copa e Cozinha"
+  },
+  "Influencers": {
+    "N1": "Indiretos",
+    "N2": "Marketing e Comunicação",
+    "N3": "Publicidade e Propaganda",
+    "N4": "Influencers"
+  },
+  "Açucar Organico": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Açucares e Edulcorantes",
+    "N4": "Açucar Organico"
+  },
+  "Armazenagem": {
+    "N1": "Indiretos",
+    "N2": "Logística",
+    "N3": "Armazenagem e Movimentação",
+    "N4": "Armazenagem"
+  },
+  "Materiais": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Obras",
+    "N4": "Materiais"
+  },
+  "Recheios e coberturas": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Ingredientes Secundários",
+    "N4": "Recheios e coberturas"
+  },
+  "Mobilidade": {
+    "N1": "Indiretos",
+    "N2": "Viagens Corporativas ",
+    "N3": "Agência de Viagens",
+    "N4": "Mobilidade"
+  },
+  "Serviços de Vigilância e Segurança": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Segurança Patrimonial",
+    "N4": "Serviços de Vigilância e Segurança"
+  },
+  "Alimentos": {
+    "N1": "Diretos",
+    "N2": "Insumos para Restaurante",
+    "N3": "Insumos alimentícios",
+    "N4": "Alimentos"
+  },
+  "Aquisição de mobiliário": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Mobiliário E Acessórios Decoração",
+    "N4": "Aquisição de mobiliário"
+  },
+  "Frete Rodoviário": {
+    "N1": "Indiretos",
+    "N2": "Logística",
+    "N3": "Transporte",
+    "N4": "Frete Rodoviário"
+  },
+  "Pallets / Outros": {
+    "N1": "Indiretos",
+    "N2": "Logística",
+    "N3": "Armazenagem e Movimentação",
+    "N4": "Pallets / Outros"
+  },
+  "Material Promocional": {
+    "N1": "Indiretos",
+    "N2": "Marketing e Comunicação",
+    "N3": "Publicidade e Propaganda",
+    "N4": "Material Promocional"
+  },
+  "Projetos e Engenharia ": {
+    "N1": "Indiretos",
+    "N2": "Serviços Especializados",
+    "N3": "Pesquisa e Desenvolvimento",
+    "N4": "Projetos e Engenharia "
+  },
+  "Energia (concessionária)": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Utilities",
+    "N4": "Energia (concessionária)"
+  },
+  "Diversos": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Materiais de Consumo",
+    "N4": "Diversos"
+  },
+  "Despesas com Hotel": {
+    "N1": "Indiretos",
+    "N2": "Viagens Corporativas ",
+    "N3": "Agência de Viagens",
+    "N4": "Despesas com Hotel"
+  },
+  "Cintas, Divisórias e Acessórios": {
+    "N1": "Diretos",
+    "N2": "Embalagens",
+    "N3": "Caixas e Cartuchos",
+    "N4": "Cintas, Divisórias e Acessórios"
+  },
+  "Espumante": {
+    "N1": "Diretos",
+    "N2": "Produto Acabado",
+    "N3": "Bebidas",
+    "N4": "Espumante"
+  },
+  "Vinho": {
+    "N1": "Diretos",
+    "N2": "Produto Acabado",
+    "N3": "Bebidas",
+    "N4": "Vinho"
+  },
+  "Pesquisas de Mercado": {
+    "N1": "Indiretos",
+    "N2": "Marketing e Comunicação",
+    "N3": "Publicidade e Propaganda",
+    "N4": "Pesquisas de Mercado"
+  },
+  "Overbag": {
+    "N1": "Diretos",
+    "N2": "Embalagens",
+    "N3": "Sacola Kraft",
+    "N4": "Overbag"
+  },
+  "Serviço de Compliance / Auditoria": {
+    "N1": "Indiretos",
+    "N2": "Serviços Especializados",
+    "N3": "Serviços Jurídicos",
+    "N4": "Serviço de Compliance / Auditoria"
+  },
+  "Despesas com Aéreo": {
+    "N1": "Indiretos",
+    "N2": "Viagens Corporativas ",
+    "N3": "Agência de Viagens",
+    "N4": "Despesas com Aéreo"
+  },
+  "Fitas Decorativas": {
+    "N1": "Diretos",
+    "N2": "Embalagens",
+    "N3": "Fitas e Etiquetas",
+    "N4": "Fitas Decorativas"
+  },
+  "Pó de Cacau": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Derivados de Cacau",
+    "N4": "Pó de Cacau"
+  },
+  "Manutenção Geral": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Manutenção Predial",
+    "N4": "Manutenção Geral"
+  },
+  "Serviços de Despachante / Aduaneiros": {
+    "N1": "Indiretos",
+    "N2": "Logística",
+    "N3": "Transporte",
+    "N4": "Serviços de Despachante / Aduaneiros"
+  },
+  "Ovos de Páscoa": {
+    "N1": "Diretos",
+    "N2": "Industrialização",
+    "N3": "Terceirização de Produção",
+    "N4": "Ovos de Páscoa"
+  },
+  "Serviços de Higienização": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Limpeza e Conservação",
+    "N4": "Serviços de Higienização"
+  },
+  "Redes": {
+    "N1": "Indiretos",
+    "N2": "Tecnologia da Informação",
+    "N3": "Hardware e Infraestrutura",
+    "N4": "Redes"
+  },
+  "Grãos e Derivados": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Ingredientes Secundários",
+    "N4": "Grãos e Derivados"
+  },
+  "Bobina de Trufa": {
+    "N1": "Diretos",
+    "N2": "Embalagens",
+    "N3": "Embalagem Embrulho",
+    "N4": "Bobina de Trufa"
+  },
+  "Manutenção Hidráulica": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Manutenção Predial",
+    "N4": "Manutenção Hidráulica"
+  },
+  "Café Revenda": {
+    "N1": "Diretos",
+    "N2": "Produto Acabado",
+    "N3": "Cafeteria",
+    "N4": "Café Revenda"
+  },
+  "Creme de Leite": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Leites e Derivados",
+    "N4": "Creme de Leite"
+  },
+  "Computadores": {
+    "N1": "Indiretos",
+    "N2": "Tecnologia da Informação",
+    "N3": "Hardware e Infraestrutura",
+    "N4": "Computadores"
+  },
+  "Digitalização e Armazenamento de Documentos": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Manutenção Predial",
+    "N4": "Digitalização e Armazenamento de Documentos"
+  },
+  "Bebidas": {
+    "N1": "Diretos",
+    "N2": "Produto Acabado",
+    "N3": "Cafeteria",
+    "N4": "Bebidas"
+  },
+  "Energia (mercado livre)": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Utilities",
+    "N4": "Energia (mercado livre)"
+  },
+  "Laminados": {
+    "N1": "Diretos",
+    "N2": "Embalagens",
+    "N3": "Embalagem Embrulho",
+    "N4": "Laminados"
+  },
+  "Maltitol": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Açucares e Edulcorantes",
+    "N4": "Maltitol"
+  },
+  "Eventos e Feiras": {
+    "N1": "Indiretos",
+    "N2": "Marketing e Comunicação",
+    "N3": "Publicidade e Propaganda",
+    "N4": "Eventos e Feiras"
+  },
+  "Especiarias": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Ingredientes Secundários",
+    "N4": "Especiarias"
+  },
+  "Frutas Frescas": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Frutas",
+    "N4": "Frutas Frescas"
+  },
+  "Folha de Pagamento e Administração de Pessoal": {
+    "N1": "Serviços Não Negociáveis",
+    "N2": "Folha de Pagamento e Administração de Pessoal",
+    "N3": "Folha de Pagamento e Administração de Pessoal",
+    "N4": "Folha de Pagamento e Administração de Pessoal"
+  },
+  "Serviços de Paisagismo": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Limpeza e Conservação",
+    "N4": "Serviços de Paisagismo"
+  },
+  "Agências Publicidade e Propaganda": {
+    "N1": "Indiretos",
+    "N2": "Marketing e Comunicação",
+    "N3": "Publicidade e Propaganda",
+    "N4": "Agências Publicidade e Propaganda"
+  },
+  "Agua e Saneamento": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Utilities",
+    "N4": "Agua e Saneamento"
+  },
+  "Embalagem Barra Papel": {
+    "N1": "Diretos",
+    "N2": "Embalagens",
+    "N3": "Embalagem Embrulho",
+    "N4": "Embalagem Barra Papel"
+  },
+  "Corantes naturais e desmoldantes": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Ingredientes Secundários",
+    "N4": "Corantes naturais e desmoldantes"
+  },
+  "Mel de Cacau": {
+    "N1": "Diretos",
+    "N2": "Produto Acabado",
+    "N3": "Bebidas",
+    "N4": "Mel de Cacau"
+  },
+  "Periféricos": {
+    "N1": "Indiretos",
+    "N2": "Tecnologia da Informação",
+    "N3": "Hardware e Infraestrutura",
+    "N4": "Periféricos"
+  },
+  "Tags": {
+    "N1": "Diretos",
+    "N2": "Embalagens",
+    "N3": "Tags e Impressos",
+    "N4": "Tags"
+  },
+  "Gás": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Utilities",
+    "N4": "Gás"
+  },
+  "Doce de Leite": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Leites e Derivados",
+    "N4": "Doce de Leite"
+  },
+  "Eritritol": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Açucares e Edulcorantes",
+    "N4": "Eritritol"
+  },
+  "Fitas e Etiquetas": {
+    "N1": "Diretos",
+    "N2": "Embalagens",
+    "N3": "Fitas e Etiquetas",
+    "N4": "Fitas e Etiquetas"
+  },
+  "Saco Kraft": {
+    "N1": "Diretos",
+    "N2": "Embalagens",
+    "N3": "Sacos/Pouchs",
+    "N4": "Saco Kraft"
+  },
+  "Consultorias, Palestras e Treinamentos": {
+    "N1": "Indiretos",
+    "N2": "Recursos Humanos e Treinamentos",
+    "N3": "Recrutamento e Seleção",
+    "N4": "Consultorias, Palestras e Treinamentos"
+  },
+  "Impostos e Taxas": {
+    "N1": "Serviços Não Negociáveis",
+    "N2": "Impostos e Taxas",
+    "N3": "Impostos e Taxas",
+    "N4": "Impostos e Taxas"
+  },
+  "Uniformes": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Materiais de Consumo",
+    "N4": "Uniformes"
+  },
+  "Consultorias Financeiras": {
+    "N1": "Indiretos",
+    "N2": "Serviços Especializados",
+    "N3": "Serviços de Consultoria",
+    "N4": "Consultorias Financeiras"
+  },
+  "Artigos de decoração": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Mobiliário E Acessórios Decoração",
+    "N4": "Artigos de decoração"
+  },
+  "Vale Refeição / Alimentação": {
+    "N1": "Indiretos",
+    "N2": "Recursos Humanos e Treinamentos",
+    "N3": "Benefícios",
+    "N4": "Vale Refeição / Alimentação"
+  },
+  "Utensílios de Mesa e Cozinha": {
+    "N1": "Diretos",
+    "N2": "Produto Acabado",
+    "N3": "Dengo Casa",
+    "N4": "Utensílios de Mesa e Cozinha"
+  },
+  "Academia": {
+    "N1": "Indiretos",
+    "N2": "Recursos Humanos e Treinamentos",
+    "N3": "Benefícios",
+    "N4": "Academia"
+  },
+  "Ribbons": {
+    "N1": "Diretos",
+    "N2": "Embalagens",
+    "N3": "Fitas e Etiquetas",
+    "N4": "Ribbons"
+  },
+  "Castanha de Para": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Oleaginosas",
+    "N4": "Castanha de Para"
+  },
+  "Leite de Aveia": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Leites e Derivados",
+    "N4": "Leite de Aveia"
+  },
+  "Contribuição Sindical": {
+    "N1": "Serviços Não Negociáveis",
+    "N2": "Recursos Humanos e Treinamentos",
+    "N3": "Contribuição Sindical",
+    "N4": "Contribuição Sindical"
+  },
+  "Manteiga de Leite": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Leites e Derivados",
+    "N4": "Manteiga de Leite"
+  },
+  "Pouch": {
+    "N1": "Diretos",
+    "N2": "Embalagens",
+    "N3": "Sacos/Pouchs",
+    "N4": "Pouch"
+  },
+  "Mídia Offline": {
+    "N1": "Indiretos",
+    "N2": "Marketing e Comunicação",
+    "N3": "Publicidade e Propaganda",
+    "N4": "Mídia Offline"
+  },
+  "Telefonia Fixa e Móvel": {
+    "N1": "Indiretos",
+    "N2": "Tecnologia da Informação",
+    "N3": "Telecomunicações",
+    "N4": "Telefonia Fixa e Móvel"
+  },
+  "Cacau Seco e Ferermentado Alto Sensorial": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Cacau Seco e Fermentado",
+    "N4": "Cacau Seco e Ferermentado Alto Sensorial"
+  },
+  "Locações Equipamentos": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Equipamentos e Eletrodomésticos",
+    "N4": "Locações Equipamentos"
+  },
+  "Equipamentos": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Equipamentos e Eletrodomésticos",
+    "N4": "Equipamentos"
+  },
+  "Reformas e reparos": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Manutenção Predial",
+    "N4": "Reformas e reparos"
+  },
+  "Materiais de Climatização": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Manutenção Predial",
+    "N4": "Materiais de Climatização"
+  },
+  "Plataformas de Recrutamento e Seleção": {
+    "N1": "Indiretos",
+    "N2": "Recursos Humanos e Treinamentos",
+    "N3": "Recrutamento e Seleção",
+    "N4": "Plataformas de Recrutamento e Seleção"
+  },
+  "Serviços de Climatização": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Manutenção Predial",
+    "N4": "Serviços de Climatização"
+  },
+  "Saúde Ocupacional": {
+    "N1": "Indiretos",
+    "N2": "Recursos Humanos e Treinamentos",
+    "N3": "Benefícios",
+    "N4": "Saúde Ocupacional"
+  },
+  "Sorbitol": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Açucares e Edulcorantes",
+    "N4": "Sorbitol"
+  },
+  "Agua de Cacau": {
+    "N1": "Diretos",
+    "N2": "Produto Acabado",
+    "N3": "Bebidas",
+    "N4": "Agua de Cacau"
+  },
+  "Serviços de Jardinagem": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Limpeza e Conservação",
+    "N4": "Serviços de Jardinagem"
+  },
+  "Escritório e Papelaria": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Materiais de Consumo",
+    "N4": "Escritório e Papelaria"
+  },
+  "Bomba Centrífuga": {
+    "N1": "Indiretos",
+    "N2": "MRO - Manuntenção, Reparo e Operação",
+    "N3": "Outros itens Industriais",
+    "N4": "Bomba Centrífuga"
+  },
+  "Manutenção Elétrica": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Manutenção Predial",
+    "N4": "Manutenção Elétrica"
+  },
+  "Lavanderia": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Limpeza e Conservação",
+    "N4": "Lavanderia"
+  },
+  "Açucar Liquido Invertido": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Açucares e Edulcorantes",
+    "N4": "Açucar Liquido Invertido"
+  },
+  "Servidores": {
+    "N1": "Indiretos",
+    "N2": "Tecnologia da Informação",
+    "N3": "Hardware e Infraestrutura",
+    "N4": "Servidores"
+  },
+  "Doces e Salgados": {
+    "N1": "Diretos",
+    "N2": "Produto Acabado",
+    "N3": "Cafeteria",
+    "N4": "Doces e Salgados"
+  },
+  "Outras despesas": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Manutenção Predial",
+    "N4": "Outras despesas"
+  },
+  "Amendoim": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Oleaginosas",
+    "N4": "Amendoim"
+  },
+  "Nozes Pecan": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Oleaginosas",
+    "N4": "Nozes Pecan"
+  },
+  "Glucose de Milho": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Açucares e Edulcorantes",
+    "N4": "Glucose de Milho"
+  },
+  "Leite de Coco": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Leites e Derivados",
+    "N4": "Leite de Coco"
+  },
+  "Tubo Metálico": {
+    "N1": "Indiretos",
+    "N2": "MRO - Manuntenção, Reparo e Operação",
+    "N3": "Outros itens Industriais",
+    "N4": "Tubo Metálico"
+  },
+  "Açucar Mascavo": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Açucares e Edulcorantes",
+    "N4": "Açucar Mascavo"
+  },
+  "Serviços e Materiais Contra Incêncio": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Manutenção Predial",
+    "N4": "Serviços e Materiais Contra Incêncio"
+  },
+  "Outros Serviços Especializados": {
+    "N1": "Indiretos",
+    "N2": "Serviços Especializados",
+    "N3": "Serviços de Consultoria",
+    "N4": "Outros Serviços Especializados"
+  },
+  "Açucar Demerara": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Açucares e Edulcorantes",
+    "N4": "Açucar Demerara"
+  },
+  "Movimentação Lojas": {
+    "N1": "Indiretos",
+    "N2": "Logística",
+    "N3": "Armazenagem e Movimentação",
+    "N4": "Movimentação Lojas"
+  },
+  "Manutenção Equipamentos e Eletrodomésticos": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Equipamentos e Eletrodomésticos",
+    "N4": "Manutenção Equipamentos e Eletrodomésticos"
+  },
+  "Vale Transporte": {
+    "N1": "Indiretos",
+    "N2": "Recursos Humanos e Treinamentos",
+    "N3": "Benefícios",
+    "N4": "Vale Transporte"
+  },
+  "Consultorias de Qualidade": {
+    "N1": "Indiretos",
+    "N2": "Serviços Especializados",
+    "N3": "Serviços de Consultoria",
+    "N4": "Consultorias de Qualidade"
+  },
+  "Frutas": {
+    "N1": "Diretos",
+    "N2": "Insumos para Restaurante",
+    "N3": "Insumos alimentícios",
+    "N4": "Frutas"
+  },
+  "Amostras": {
+    "N1": "Serviços Não Negociáveis",
+    "N2": "Amostras",
+    "N3": "Amostras",
+    "N4": "Amostras"
+  },
+  "Frete Lojas": {
+    "N1": "Indiretos",
+    "N2": "Logística",
+    "N3": "Transporte",
+    "N4": "Frete Lojas"
+  },
+  "Serviço de Manutenção": {
+    "N1": "Indiretos",
+    "N2": "Facilities e Serviços Administrativos",
+    "N3": "Manutenção Predial",
+    "N4": "Serviço de Manutenção"
+  },
+  "Computadores - Locação": {
+    "N1": "Indiretos",
+    "N2": "Tecnologia da Informação",
+    "N3": "Hardware e Infraestrutura",
+    "N4": "Computadores - Locação"
+  },
+  "Cartão Viagens": {
+    "N1": "Indiretos",
+    "N2": "Viagens Corporativas ",
+    "N3": "Agência de Viagens",
+    "N4": "Cartão Viagens"
+  },
+  "Treinamentos": {
+    "N1": "Indiretos",
+    "N2": "Recursos Humanos e Treinamentos",
+    "N3": "Benefícios",
+    "N4": "Treinamentos"
+  },
+  "Links": {
+    "N1": "Indiretos",
+    "N2": "Tecnologia da Informação",
+    "N3": "Telecomunicações",
+    "N4": "Links"
+  },
+  "Comunicação Institucional": {
+    "N1": "Indiretos",
+    "N2": "Marketing e Comunicação",
+    "N3": "Comunicação Corporativa",
+    "N4": "Comunicação Institucional"
+  },
+  "Cacau Seco e Ferermentado Exportação": {
+    "N1": "Diretos",
+    "N2": "Matéria Prima",
+    "N3": "Cacau Seco e Fermentado",
+    "N4": "Cacau Seco e Ferermentado Exportação"
+  },
+  "Sensor Industrial": {
+    "N1": "Indiretos",
+    "N2": "MRO - Manuntenção, Reparo e Operação",
+    "N3": "Outros itens Industriais",
+    "N4": "Sensor Industrial"
+  }
+}

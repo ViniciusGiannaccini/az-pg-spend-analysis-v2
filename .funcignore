@@ -1,0 +1,44 @@
+# Development environment
+.venv
+.vscode
+.idea
+.pytest_cache
+
+# Git files
+.git
+.gitignore
+.editorconfig
+
+# Test directory
+tests/
+
+# Documentation
+docs/
+README.md
+*.md
+
+# Python cache
+__pycache__
+*.pyc
+
+# Local settings (secrets - configured via Azure App Settings)
+local.settings.json
+
+# Utility Scripts (local development only)
+scripts/
+
+# ML Training data (not needed at runtime)
+training/
+
+# Exclude training datasets but INCLUDE model artifacts
+models/*/dataset_master.csv
+models/*/versions/
+
+# Logs
+*.log
+
+# Frontend (deployed separately to Vercel)
+frontend/
+
+# macOS
+.DS_Store

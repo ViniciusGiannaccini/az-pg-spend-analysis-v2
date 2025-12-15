@@ -1,0 +1,593 @@
+{
+  "Servico de Catering e Buffet ": {
+    "N1": "Indiretos",
+    "N2": "Marketing e Eventos",
+    "N3": "Eventos",
+    "N4": "Servico de Catering e Buffet "
+  },
+  "Frutas | Coffe | Desjejum": {
+    "N1": "Indiretos",
+    "N2": "Facilities",
+    "N3": "Restaurante | Copa | Cozinha"
+  },
+  "Sanitario | Lavatorio | Cuba": {
+    "N1": "Indiretos",
+    "N2": "Expansao Civil",
+    "N3": "Materiais Hidrossanitario"
+  },
+  "Cimento| Argamassa | Rejunte": {
+    "N1": "Indiretos",
+    "N2": "MRO",
+    "N3": "Materiais Construcao"
+  },
+  "Gestao Imobiliaria | Condominio": {
+    "N1": "Indiretos",
+    "N2": "Real Estate",
+    "N3": "Real Estate"
+  },
+  "Servicos Financeiros | Comissoes | Taxas": {
+    "N1": "Indiretos",
+    "N2": "Administrativo",
+    "N3": "Servicos Especializados"
+  },
+  "Transporte VT": {
+    "N1": "Indiretos",
+    "N2": "RH",
+    "N3": "Beneficios"
+  },
+  "Criacao | Edicao | Avaliacao Pedagogica": {
+    "N1": "Diretos",
+    "N2": "Servico Educacional",
+    "N3": "Servico Educacional"
+  },
+  "Papelaria Administrativa": {
+    "N1": "Indiretos",
+    "N2": "Administrativo",
+    "N3": "Material Escritorio"
+  },
+  "Madeiras | Compensados | MDF": {
+    "N1": "Indiretos",
+    "N2": "Expansao Civil",
+    "N3": "Materiais Construcao"
+  },
+  "Seguro Predial": {
+    "N1": "Indiretos",
+    "N2": "Real Estate",
+    "N3": "Real Estate"
+  },
+  "3ª EM e PV": {
+    "N1": "Diretos",
+    "N2": "Produto Grafico",
+    "N3": "Produto Grafico | Livro"
+  },
+  "Tubulacoes | Conexoes | Acessorios": {
+    "N1": "Indiretos",
+    "N2": "MRO",
+    "N3": "Materiais Hidrossanitario"
+  },
+  "Fixadores | Ferragens": {
+    "N1": "Indiretos",
+    "N2": "Expansao Civil",
+    "N3": "Materiais Construcao"
+  },
+  "Insumos Jardinagem": {
+    "N1": "Indiretos",
+    "N2": "Facilities",
+    "N3": "Limpeza | Conservacao | Jardinagem"
+  },
+  "Outros Materiais Eletricos": {
+    "N1": "Indiretos",
+    "N2": "Expansao Civil",
+    "N3": "Materiais Eletricos"
+  },
+  "Outros Materiais Construcao": {
+    "N1": "Indiretos",
+    "N2": "Expansao Civil",
+    "N3": "Materiais Construcao"
+  },
+  "Suprimento Didatico": {
+    "N1": "Diretos",
+    "N2": "Apoio Academico | Pedagogico",
+    "N3": "Suprimento Didatico"
+  },
+  "Outros Equipamentos T.I": {
+    "N1": "Indiretos",
+    "N2": "Tecnologia Corporativa",
+    "N3": "Equipamentos | Pecas | Outros"
+  },
+  "Serralheria": {
+    "N1": "Indiretos",
+    "N2": "Expansao Civil",
+    "N3": "Materiais Construcao"
+  },
+  "Impressao | Plotagem": {
+    "N1": "Indiretos",
+    "N2": "Marketing e Eventos",
+    "N3": "Marketing"
+  },
+  "Vedacao | Fixacao | Acessorios": {
+    "N1": "Indiretos",
+    "N2": "Expansao Civil",
+    "N3": "Materiais Hidrossanitario"
+  },
+  "Gestao Viagens | Agencias": {
+    "N1": "Indiretos",
+    "N2": "Viagem Corporativa",
+    "N3": "Viagem"
+  },
+  "Materiais | Equipamentos Limp/Jard.": {
+    "N1": "Indiretos",
+    "N2": "Facilities",
+    "N3": "Limpeza | Conservacao | Jardinagem"
+  },
+  "EPC | Equip. Protetor": {
+    "N1": "Indiretos",
+    "N2": "MRO",
+    "N3": "EPC | EPI"
+  },
+  "Restaurante | Copa | Cozinha": {
+    "N1": "Indiretos",
+    "N2": "Facilities",
+    "N3": "Restaurante | Copa | Cozinha"
+  },
+  "Tomadas | Interruptores | Acessorios": {
+    "N1": "Indiretos",
+    "N2": "Expansao Civil",
+    "N3": "Materiais Eletricos"
+  },
+  "Fios | Cabos": {
+    "N1": "Indiretos",
+    "N2": "MRO",
+    "N3": "Materiais Eletricos"
+  },
+  "EPI Geral": {
+    "N1": "Indiretos",
+    "N2": "MRO",
+    "N3": "EPC | EPI"
+  },
+  "Materiais Limpeza | Higiene": {
+    "N1": "Indiretos",
+    "N2": "Facilities",
+    "N3": "Limpeza | Conservacao | Jardinagem"
+  },
+  "Valvulas | Torneiras | Registros": {
+    "N1": "Indiretos",
+    "N2": "MRO",
+    "N3": "Materiais Hidrossanitario"
+  },
+  "Corte | Brocas | Abrasivos": {
+    "N1": "Indiretos",
+    "N2": "MRO",
+    "N3": "Ferramentas"
+  },
+  "Materiais Descartaveis": {
+    "N1": "Indiretos",
+    "N2": "Facilities",
+    "N3": "Material Uso | Consumo"
+  },
+  "Ambulatorio | Enfermagem": {
+    "N1": "Indiretos",
+    "N2": "Facilities",
+    "N3": "Ambulatorio | Enfermagem"
+  },
+  "Manuais | Eletricas": {
+    "N1": "Indiretos",
+    "N2": "MRO",
+    "N3": "Ferramentas"
+  },
+  "Ferro | Aco | Aluminio": {
+    "N1": "Indiretos",
+    "N2": "Expansao Civil",
+    "N3": "Materiais Construcao"
+  },
+  "Tinta | Verniz | Selantes | Cola": {
+    "N1": "Indiretos",
+    "N2": "MRO",
+    "N3": "Materiais Construcao"
+  },
+  "Material Didatico Acervo": {
+    "N1": "Diretos",
+    "N2": "Apoio Academico | Pedagogico",
+    "N3": "Biblioteca"
+  },
+  "Controle Acesso | Vigilancia Eletronica": {
+    "N1": "Indiretos",
+    "N2": "Facilities",
+    "N3": "Seguranca Patrimonial"
+  },
+  "Agencia Publicidade": {
+    "N1": "Indiretos",
+    "N2": "Marketing e Eventos",
+    "N3": "Marketing"
+  },
+  "Manutencao | Locacao | Reformas": {
+    "N1": "Indiretos",
+    "N2": "Facilities",
+    "N3": "Manutencao Predial"
+  },
+  "Acessorio Decoracao": {
+    "N1": "Indiretos",
+    "N2": "Mobiliario",
+    "N3": "Mobiliario | Decoração"
+  },
+  "Laboratorios": {
+    "N1": "Diretos",
+    "N2": "Apoio Academico | Pedagogico",
+    "N3": "Laboratorios"
+  },
+  "Correio | Encomenda": {
+    "N1": "Indiretos",
+    "N2": "Facilities",
+    "N3": "Correio | Encomenda"
+  },
+  "Outro Servico Administrativo": {
+    "N1": "Indiretos",
+    "N2": "Administrativo",
+    "N3": "Servico Administrativo"
+  },
+  "Licenca de Software": {
+    "N1": "Indiretos",
+    "N2": "Tecnologia Corporativa",
+    "N3": "Software | Licenca Comercial"
+  },
+  "EFI": {
+    "N1": "Diretos",
+    "N2": "Produto Grafico",
+    "N3": "Produto Grafico | Livro"
+  },
+  "Energia Eletrica": {
+    "N1": "Indiretos",
+    "N2": "Real Estate",
+    "N3": "Real Estate"
+  },
+  "Consultorias Administrativas| Fiscal | Tributaria": {
+    "N1": "Indiretos",
+    "N2": "Administrativo",
+    "N3": "Servicos Especializados"
+  },
+  "Disjuntores | Quadros": {
+    "N1": "Indiretos",
+    "N2": "Expansao Civil",
+    "N3": "Materiais Eletricos"
+  },
+  "Iluminacao": {
+    "N1": "Indiretos",
+    "N2": "MRO",
+    "N3": "Materiais Eletricos"
+  },
+  "Consultoria Projetos | Engenharia": {
+    "N1": "Indiretos",
+    "N2": "Expansao Civil",
+    "N3": "Servicos Especializados"
+  },
+  "Hospedagem": {
+    "N1": "Indiretos",
+    "N2": "Viagem Corporativa",
+    "N3": "Viagem"
+  },
+  "Alimentacao VR": {
+    "N1": "Indiretos",
+    "N2": "RH",
+    "N3": "Beneficios"
+  },
+  "Produtos Quimicos | Lubrificantes | Desengripantes": {
+    "N1": "Indiretos",
+    "N2": "MRO",
+    "N3": "Materiais Construcao"
+  },
+  "Jogos | Brinquedos | Instrumentos Musicais": {
+    "N1": "Diretos",
+    "N2": "Apoio Academico | Pedagogico",
+    "N3": "Jogos | Brinquedos | Instrumentos Musicais"
+  },
+  "Manutencao Veiculos": {
+    "N1": "Indiretos",
+    "N2": "Facilities",
+    "N3": "Transporte | Combustivel | Veiculos"
+  },
+  "Servico Juridico": {
+    "N1": "Indiretos",
+    "N2": "Administrativo",
+    "N3": "Servicos Especializados"
+  },
+  "Forros | Drywall": {
+    "N1": "Indiretos",
+    "N2": "MRO",
+    "N3": "Materiais Construcao"
+  },
+  "Brindes | Personalizados": {
+    "N1": "Indiretos",
+    "N2": "Marketing e Eventos",
+    "N3": "Marketing"
+  },
+  "Treinamento | Desenvolvimento": {
+    "N1": "Indiretos",
+    "N2": "RH",
+    "N3": "Treinamento | Desenvolvimento"
+  },
+  "Switch | Access Point | Cabo | Acessorios": {
+    "N1": "Indiretos",
+    "N2": "Tecnologia Corporativa",
+    "N3": "Rede | Conectividade"
+  },
+  "Bateria | Alimentacao": {
+    "N1": "Indiretos",
+    "N2": "MRO",
+    "N3": "Materiais Eletricos"
+  },
+  "Transporte Terrestre": {
+    "N1": "Indiretos",
+    "N2": "Viagem Corporativa",
+    "N3": "Viagem"
+  },
+  "EM1 e EM2": {
+    "N1": "Diretos",
+    "N2": "Produto Grafico",
+    "N3": "Produto Grafico | Livro"
+  },
+  "Eletrodomestico | Eletronico": {
+    "N1": "Indiretos",
+    "N2": "Facilities",
+    "N3": "Eletrodomestico | Eletronico"
+  },
+  "Agua | Esgoto": {
+    "N1": "Indiretos",
+    "N2": "Real Estate",
+    "N3": "Real Estate"
+  },
+  "Equipamento | Peca | Acessorio": {
+    "N1": "Indiretos",
+    "N2": "Tecnologia Corporativa",
+    "N3": "Telecomunicacao"
+  },
+  "Acessorios Mobiliario": {
+    "N1": "Indiretos",
+    "N2": "Mobiliario",
+    "N3": "Mobiliario | Decoração"
+  },
+  "Locacao  Imoveis": {
+    "N1": "Indiretos",
+    "N2": "Real Estate",
+    "N3": "Real Estate"
+  },
+  "Plano Saude | Odontologico": {
+    "N1": "Indiretos",
+    "N2": "RH",
+    "N3": "Beneficios"
+  },
+  "Passagem Aerea": {
+    "N1": "Indiretos",
+    "N2": "Viagem Corporativa",
+    "N3": "Viagem"
+  },
+  "Locacao Equipamentos Obras": {
+    "N1": "Indiretos",
+    "N2": "Expansao Civil",
+    "N3": "Obras | Reformas | Locacao"
+  },
+  "Patentes | Propriedade Intelectual": {
+    "N1": "Diretos",
+    "N2": "Servico Educacional",
+    "N3": "Servico Educacional"
+  },
+  "Uniforme": {
+    "N1": "Indiretos",
+    "N2": "RH",
+    "N3": "Uniforme"
+  },
+  "Revista | Jornal | Digital": {
+    "N1": "Indiretos",
+    "N2": "Administrativo",
+    "N3": "Assinaturas Mensal"
+  },
+  "Perifericos": {
+    "N1": "Indiretos",
+    "N2": "Tecnologia Corporativa",
+    "N3": "Equipamentos | Pecas | Outros"
+  },
+  "Outros Servicos TI": {
+    "N1": "Indiretos",
+    "N2": "Tecnologia Corporativa",
+    "N3": "Servicos TI"
+  },
+  "EFII": {
+    "N1": "Diretos",
+    "N2": "Produto Grafico",
+    "N3": "Produto Grafico | Livro"
+  },
+  "Transporte Fretado": {
+    "N1": "Indiretos",
+    "N2": "RH",
+    "N3": "Beneficios"
+  },
+  "Gerador | Equipamentos Eletrico": {
+    "N1": "Indiretos",
+    "N2": "Expansao Civil",
+    "N3": "Materiais Eletricos"
+  },
+  "Taxas | Alvaras | IPTU": {
+    "N1": "Indiretos",
+    "N2": "Real Estate",
+    "N3": "Real Estate"
+  },
+  "Seguro Vida": {
+    "N1": "Indiretos",
+    "N2": "RH",
+    "N3": "Beneficios"
+  },
+  "Locacao Veiculos": {
+    "N1": "Indiretos",
+    "N2": "Viagem Corporativa",
+    "N3": "Viagem"
+  },
+  "Consultoria TI": {
+    "N1": "Indiretos",
+    "N2": "Tecnologia Corporativa",
+    "N3": "Consultoria TI"
+  },
+  "Revestimento": {
+    "N1": "Indiretos",
+    "N2": "Expansao Civil",
+    "N3": "Materiais Construcao"
+  },
+  "Transporte | Combustivel": {
+    "N1": "Indiretos",
+    "N2": "Facilities",
+    "N3": "Transporte | Combustivel | Veiculos"
+  },
+  "Esquadrias": {
+    "N1": "Indiretos",
+    "N2": "Expansao Civil",
+    "N3": "Materiais Construcao"
+  },
+  "Voucher": {
+    "N1": "Indiretos",
+    "N2": "RH",
+    "N3": "Beneficios"
+  },
+  "Comunicacao Visual": {
+    "N1": "Indiretos",
+    "N2": "Marketing e Eventos",
+    "N3": "Marketing"
+  },
+  "Equipamentos Hidro": {
+    "N1": "Indiretos",
+    "N2": "Expansao Civil",
+    "N3": "Materiais Hidrossanitario"
+  },
+  "Desenvolvimento Software": {
+    "N1": "Indiretos",
+    "N2": "Tecnologia Corporativa",
+    "N3": "Software Desenvolvimento"
+  },
+  "Areia| Brita | Cascalho": {
+    "N1": "Indiretos",
+    "N2": "Expansao Civil",
+    "N3": "Materiais Construcao"
+  },
+  "Organizacao e Producao de Eventos": {
+    "N1": "Indiretos",
+    "N2": "Marketing e Eventos",
+    "N3": "Eventos"
+  },
+  "Materiais de Cobertura": {
+    "N1": "Indiretos",
+    "N2": "Expansao Civil",
+    "N3": "Materiais Construcao"
+  },
+  "Servico de Limpeza| Jardinagem": {
+    "N1": "Indiretos",
+    "N2": "Facilities",
+    "N3": "Limpeza | Conservacao | Jardinagem"
+  },
+  "Coleta | Destinacao": {
+    "N1": "Indiretos",
+    "N2": "Facilities",
+    "N3": "Residuos"
+  },
+  "Infraestrutura | Logistica de Eventos": {
+    "N1": "Indiretos",
+    "N2": "Marketing e Eventos",
+    "N3": "Eventos"
+  },
+  "Ar Condicionado | Ventilador": {
+    "N1": "Diretos",
+    "N2": "Infraestrutura Educacional",
+    "N3": "Climatizacao"
+  },
+  "Locacao Equipamentos TI": {
+    "N1": "Indiretos",
+    "N2": "Tecnologia Corporativa",
+    "N3": "Locacao Equipamento TI"
+  },
+  "Vidros | Espelhos": {
+    "N1": "Indiretos",
+    "N2": "MRO",
+    "N3": "Materiais Construcao"
+  },
+  "Servico de Seguranca Patrimonial": {
+    "N1": "Indiretos",
+    "N2": "Facilities",
+    "N3": "Seguranca Patrimonial"
+  },
+  "Internet": {
+    "N1": "Indiretos",
+    "N2": "Tecnologia Corporativa",
+    "N3": "Rede | Conectividade"
+  },
+  "EI": {
+    "N1": "Diretos",
+    "N2": "Produto Grafico",
+    "N3": "Produto Grafico | Livro"
+  },
+  "Servicos Terceirizados Civil": {
+    "N1": "Indiretos",
+    "N2": "Expansao Civil",
+    "N3": "Obras | Reformas | Locacao"
+  },
+  "Quadro | Lousas": {
+    "N1": "Indiretos",
+    "N2": "Mobiliario",
+    "N3": "Mobiliario | Decoração"
+  },
+  "Cadeira | Assento | Banqueta": {
+    "N1": "Indiretos",
+    "N2": "Mobiliario",
+    "N3": "Mobiliario | Decoração"
+  },
+  "MDO - Temporaria": {
+    "N1": "Indiretos",
+    "N2": "RH",
+    "N3": "Recrutamento | Selecao"
+  },
+  "Computador": {
+    "N1": "Indiretos",
+    "N2": "Tecnologia Corporativa",
+    "N3": "Equipamentos | Pecas | Outros"
+  },
+  "Mesa | Balcao": {
+    "N1": "Indiretos",
+    "N2": "Mobiliario",
+    "N3": "Mobiliario | Decoração"
+  },
+  "No Break": {
+    "N1": "Indiretos",
+    "N2": "Tecnologia Corporativa",
+    "N3": "Equipamentos | Pecas | Outros"
+  },
+  "Mobilia": {
+    "N1": "Indiretos",
+    "N2": "Mobiliario",
+    "N3": "Mobiliario | Decoração"
+  },
+  "Armario | Estante": {
+    "N1": "Indiretos",
+    "N2": "Mobiliario",
+    "N3": "Mobiliario | Decoração"
+  },
+  "Fundacoes | Estrutura": {
+    "N1": "Indiretos",
+    "N2": "Expansao Civil",
+    "N3": "Materiais Construcao"
+  },
+  "Projetor": {
+    "N1": "Indiretos",
+    "N2": "Tecnologia Corporativa",
+    "N3": "Equipamentos | Pecas | Outros"
+  },
+  "Servicos Terceirizados Eletrico": {
+    "N1": "Indiretos",
+    "N2": "Expansao Civil",
+    "N3": "Obras | Reformas | Locacao"
+  },
+  "Recrutamento Administrativo": {
+    "N1": "Indiretos",
+    "N2": "RH",
+    "N3": "Recrutamento | Selecao"
+  },
+  "Servico de Catering e Buffet": {
+    "N1": "Indiretos",
+    "N2": "Marketing e Eventos",
+    "N3": "Eventos"
+  }
+}
