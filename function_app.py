@@ -225,20 +225,23 @@ def process_taxonomy(req: func.HttpRequest) -> func.HttpResponse:
     session_id = str(uuid.uuid4())
 
     try:
-        body = req.get_json()
+        req_body = req.get_json()
+        logging.info("Request body received.")
     except ValueError:
-        body = {}
+        req_body = {}
 
-    file_content_b64 = body.get("fileContent")
-    dict_content_b64 = body.get("dictionaryContent")
-    sector = body.get("sector")
-    original_filename = body.get("originalFilename", "")
-    custom_hierarchy_b64 = body.get("customHierarchy")  # Optional custom hierarchy
+    file_content_b64 = req_body.get("fileContent")
+    dict_content_b64 = req_body.get("dictionaryContent")
+    sector = req_body.get("sector")
+    original_filename = req_body.get("originalFilename", "")
+    custom_hierarchy_b64 = req_body.get("customHierarchy")
 
     if not file_content_b64:
+        logging.error("Missing fileContent in request.")
         return func.HttpResponse(
-            "Parâmetro 'fileContent' (base64) é obrigatório no corpo da requisição.",
-            status_code=400
+            json.dumps({"error": "Parâmetro 'fileContent' (base64) é obrigatório."}),
+            status_code=400,
+            mimetype="application/json"
         )
 
     if not dict_content_b64:
@@ -877,13 +880,9 @@ def train_model_endpoint(req: func.HttpRequest) -> func.HttpResponse:
             }
         )
 
-@app.function_name(name="GetModelHistory")
-@app.route(
-    route="GetModelHistory",
-    methods=["GET", "OPTIONS"],
-    auth_level=func.AuthLevel.ANONYMOUS
-)
-def get_model_history(req: func.HttpRequest) -> func.HttpResponse:
+@app.function_name(name="DeleteTrainingData")
+@app.route(route="DeleteTrainingData", auth_level=func.AuthLevel.ANONYMOUS)
+def DeleteTrainingData(req: func.HttpRequest) -> func.HttpResponse:
     if req.method == "OPTIONS":
         return func.HttpResponse(status_code=204, headers={
             "Access-Control-Allow-Origin": "*",
@@ -892,8 +891,171 @@ def get_model_history(req: func.HttpRequest) -> func.HttpResponse:
         })
 
     sector = req.params.get("sector")
+    item_description = req.params.get("item_description") # The exact description to delete
+    logging.info(f"DeleteTrainingData requested for sector: {sector}, item_description: {item_description}")
+
+    if not sector or not item_description:
+        return func.HttpResponse(
+            json.dumps({"error": "Parâmetros 'sector' e 'item_description' são obrigatórios."}),
+            status_code=400,
+            mimetype="application/json"
+        )
+
+    try:
+        models_dir = os.path.join(os.path.dirname(__file__), "models")
+        sector_dir = os.path.join(models_dir, sector.lower())
+        master_file = os.path.join(sector_dir, "dataset_master.csv")
+
+        if not os.path.exists(master_file):
+            logging.info(f"No master dataset found for sector: {sector}. Nothing to delete.")
+            return func.HttpResponse(
+                body=json.dumps({"message": "No master dataset found, nothing to delete."}),
+                status_code=200, 
+                mimetype="application/json",
+                headers={"Access-Control-Allow-Origin": "*"}
+            )
+            
+        df_master = pd.read_csv(master_file)
+        
+        # Normalize the item_description for comparison
+        from src.taxonomy_engine import normalize_text
+        normalized_item_description = normalize_text(item_description)
+
+        # Filter out the row(s) that match the normalized description
+        initial_len = len(df_master)
+        df_updated = df_master[df_master['Descrição_Normalizada'] != normalized_item_description]
+        
+        if len(df_updated) == initial_len:
+            logging.info(f"Item '{item_description}' not found in master dataset for sector: {sector}.")
+            return func.HttpResponse(
+                body=json.dumps({"message": f"Item '{item_description}' not found, no changes made."}),
+                status_code=200, 
+                mimetype="application/json",
+                headers={"Access-Control-Allow-Origin": "*"}
+            )
+        
+        # Save the updated master dataset
+        df_updated.to_csv(master_file, index=False)
+        logging.info(f"Deleted {initial_len - len(df_updated)} entries for item '{item_description}' from master dataset for sector: {sector}.")
+
+        return func.HttpResponse(
+            body=json.dumps({"message": f"Item '{item_description}' successfully deleted from training data."}),
+            status_code=200,
+            mimetype="application/json",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type"
+            }
+        )
+    except Exception as e:
+        logging.error(f"Error deleting training data: {e}")
+        return func.HttpResponse(f"Error deleting training data: {str(e)}", status_code=500)
+
+@app.function_name(name="GetTrainingData")
+@app.route(route="GetTrainingData", auth_level=func.AuthLevel.ANONYMOUS)
+def GetTrainingData(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return func.HttpResponse(status_code=204, headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type"
+        })
+
+    sector = req.params.get("sector")
+    version_id = req.params.get("version_id") # Optional: to get data for a specific version
+    logging.info(f"GetTrainingData requested for sector: {sector}, version: {version_id}")
+
     if not sector:
-        return func.HttpResponse("Missing 'sector' parameter.", status_code=400)
+        return func.HttpResponse(
+            json.dumps({"error": "Parâmetro 'sector' é obrigatório."}),
+            status_code=400,
+            mimetype="application/json"
+        )
+
+    try:
+        models_dir = os.path.join(os.path.dirname(__file__), "models")
+        sector_dir = os.path.join(models_dir, sector.lower())
+        master_file = os.path.join(sector_dir, "dataset_master.csv")
+
+        if not os.path.exists(master_file):
+            logging.info(f"No master dataset found for sector: {sector}. Returning empty list.")
+            return func.HttpResponse(
+                body=json.dumps([], ensure_ascii=False),
+                status_code=200, 
+                mimetype="application/json",
+                headers={"Access-Control-Allow-Origin": "*"}
+            )
+            
+        df_master = pd.read_csv(master_file)
+
+        if version_id and version_id != "active":
+            # Filter data to include only up to the specified version
+            if 'added_version' in df_master.columns:
+                def get_version_num(v):
+                    try:
+                        return int(str(v).replace('v_', '').replace('legacy', '0'))
+                    except:
+                        return 0
+                
+                target_v_num = get_version_num(version_id)
+                df_master['_v_num'] = df_master['added_version'].apply(get_version_num)
+                df_filtered = df_master[df_master['_v_num'] <= target_v_num].drop(columns=['_v_num'])
+                df_to_return = df_filtered
+            else:
+                # If no version tracking, return all data
+                df_to_return = df_master
+        else:
+            # If no version_id or "active", return the full master dataset
+            df_to_return = df_master
+        
+        # Convert DataFrame to list of dictionaries for JSON serialization
+        data = df_to_return.to_dict(orient='records')
+        
+        logging.info(f"Returning {len(data)} training data entries for {sector} (version: {version_id})")
+        return func.HttpResponse(
+            body=json.dumps(data, ensure_ascii=False),
+            status_code=200,
+            mimetype="application/json",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type"
+            }
+        )
+    except Exception as e:
+        logging.error(f"Error fetching training data: {e}")
+        return func.HttpResponse(f"Error fetching training data: {str(e)}", status_code=500)
+
+@app.function_name(name="GetModelHistory")
+@app.route(route="GetModelHistory", auth_level=func.AuthLevel.ANONYMOUS)
+def GetModelHistory(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return func.HttpResponse(status_code=204, headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type"
+        })
+
+    sector = req.params.get("sector")
+    logging.info('Python HTTP trigger function processed a request for GetModelHistory.')
+
+    if req.method == "OPTIONS":
+        return func.HttpResponse(status_code=204, headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type"
+        })
+
+    sector = req.params.get("sector")
+    logging.info(f"GetModelHistory requested for sector: {sector}")
+
+    if not sector:
+        return func.HttpResponse(
+            json.dumps({"error": "Parâmetro 'sector' é obrigatório."}),
+            status_code=400,
+            mimetype="application/json"
+        )
 
     try:
         models_dir = os.path.join(os.path.dirname(__file__), "models")
@@ -901,6 +1063,7 @@ def get_model_history(req: func.HttpRequest) -> func.HttpResponse:
         history_file = os.path.join(sector_dir, "model_history.json")
         
         if not os.path.exists(history_file):
+            logging.info(f"No history file found for sector: {sector}. Returning empty list.")
             return func.HttpResponse(
                 body=json.dumps([], ensure_ascii=False),
                 status_code=200, 
@@ -910,7 +1073,8 @@ def get_model_history(req: func.HttpRequest) -> func.HttpResponse:
             
         with open(history_file, 'r') as f:
             history = json.load(f)
-            
+        
+        logging.info(f"Returning history with {len(history)} entries for {sector}")
         return func.HttpResponse(
             body=json.dumps(history, ensure_ascii=False),
             status_code=200,

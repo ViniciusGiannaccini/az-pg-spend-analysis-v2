@@ -132,11 +132,18 @@ export const apiClient = {
     },
 
     async getModelHistory(sector: string): Promise<any[]> {
-        const response = await axios.get(`${API_BASE_URL}/GetModelHistory`, {
-            params: { sector, t: Date.now() },
-            headers: getAuthHeaders()
-        })
-        return response.data
+        console.log(`[API] Fetching model history for sector: ${sector} from ${API_BASE_URL}/GetModelHistory`)
+        try {
+            const response = await axios.get(`${API_BASE_URL}/GetModelHistory`, {
+                params: { sector, t: Date.now() },
+                headers: getAuthHeaders()
+            })
+            console.log(`[API] Model history received: ${response.data?.length} entries`)
+            return response.data
+        } catch (error) {
+            console.error('[API] Error fetching model history:', error)
+            throw error
+        }
     },
 
     async setActiveModel(sector: string, versionId: string): Promise<any> {
