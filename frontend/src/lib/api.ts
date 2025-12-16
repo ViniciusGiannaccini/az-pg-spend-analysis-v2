@@ -1,6 +1,6 @@
 import axios, { AxiosRequestConfig } from 'axios'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:7071/api'
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:7071/api'
 const FUNCTION_KEY = process.env.NEXT_PUBLIC_FUNCTION_KEY || ''
 
 // Helper to add Function Key header for Azure Functions (production only)

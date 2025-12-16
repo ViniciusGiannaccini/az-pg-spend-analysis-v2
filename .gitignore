@@ -53,3 +53,9 @@ npm-debug.log*
 playwright-report/
 test-results/
 coverage/
+
+# ==== EXCEL FILES ====
+*.xlsx
+
+# ==== CACHE FILES ====
+/models/cache

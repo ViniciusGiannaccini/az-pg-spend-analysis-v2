@@ -739,12 +739,22 @@ def train_model_endpoint(req: func.HttpRequest) -> func.HttpResponse:
     master_file = os.path.join(sector_dir, "dataset_master.csv")
     
     df_master = pd.DataFrame()
+    logging.warning(f"[TRAIN DEBUG] Looking for master file at: {master_file}")
+    logging.warning(f"[TRAIN DEBUG] File exists: {os.path.exists(master_file)}")
+    
     if os.path.exists(master_file):
         try:
-            df_master = pd.read_csv(master_file)
-            logging.info(f"Loaded existing master dataset with {len(df_master)} records.")
+            # Read with explicit encoding
+            df_master = pd.read_csv(master_file, encoding='utf-8')
+            logging.warning(f"[TRAIN DEBUG] Loaded master: {len(df_master)} rows, empty={df_master.empty}")
+            if 'added_version' in df_master.columns:
+                version_counts = df_master['added_version'].value_counts().to_dict()
+                logging.warning(f"[TRAIN DEBUG] Versions in loaded master: {version_counts}")
         except Exception as e:
+            logging.error(f"[TRAIN DEBUG] ERROR reading master: {e}")
             logging.warning(f"Could not read master dataset: {e}. Starting fresh.")
+    else:
+        logging.warning(f"[TRAIN DEBUG] Master file does NOT exist, starting fresh")
     
     # Standardize columns for master dataset
     # Now includes full hierarchy (N1, N2, N3, N4) for complete traceability
@@ -768,168 +778,129 @@ def train_model_endpoint(req: func.HttpRequest) -> func.HttpResponse:
     df_new_subset['added_version'] = next_version
     df_new_subset['added_at'] = datetime.now().isoformat()
     
-    # Concatenate
+    # Concatenate with existing master dataset
     if not df_master.empty:
-        # Ensure master has columns (handling legacy)
+        logging.info(f"Existing master has {len(df_master)} rows")
+        
+        # Ensure master has Descrição_Normalizada column (for deduplication)
         if 'Descrição_Normalizada' not in df_master.columns and 'Descrição' in df_master.columns:
-             df_master['Descrição_Normalizada'] = df_master['Descrição'].map(normalize_text)
+            df_master['Descrição_Normalizada'] = df_master['Descrição'].map(normalize_text)
+            logging.info("Created Descrição_Normalizada column for existing master")
+        
         # Add legacy tracking columns if missing
         if 'added_version' not in df_master.columns:
             df_master['added_version'] = 'legacy'
         if 'added_at' not in df_master.columns:
             df_master['added_at'] = ''
-             
+        
+        # Ensure both dataframes have same columns before concat
+        all_cols = list(set(df_master.columns.tolist() + df_new_subset.columns.tolist()))
+        for col in all_cols:
+            if col not in df_master.columns:
+                df_master[col] = ''
+            if col not in df_new_subset.columns:
+                df_new_subset[col] = ''
+        
         df_combined = pd.concat([df_master, df_new_subset], ignore_index=True)
+        logging.info(f"Combined dataset: {len(df_master)} (existing) + {len(df_new_subset)} (new) = {len(df_combined)} rows")
     else:
         df_combined = df_new_subset
+        logging.info(f"No existing master, starting with {len(df_combined)} rows")
         
     # Deduplicate
     # Criteria: Same Normalized Description AND Same N4. 
-    # If same Description but DIFFERENT N4, we might have a conflict. For now, we'll keep the NEWEST (last).
-    # Ideally, we should check for consistency. 
-    # Let's drop exact duplicates first.
+    # IMPORTANT: keep='first' preserves original training data (v1, v2, etc.)
+    # and only adds truly NEW unique items from the new file.
+    # This prevents overwriting historical training data with identical new uploads.
     before_dedup = len(df_combined)
-    df_combined.drop_duplicates(subset=['Descrição_Normalizada', 'N4'], keep='last', inplace=True)
+    df_combined.drop_duplicates(subset=['Descrição_Normalizada', 'N4'], keep='first', inplace=True)
     
-    # OPTIONAL: Handle conflicts (Same Description, Different N4). 
-    # Current behavior: Keep both variants if N4 is different? 
-    # Or assume the latest upload corrects the old one?
-    # Let's assume the latest upload is the "correction" and drop duplicates on Description only, keeping last.
-    # df_combined.drop_duplicates(subset=['Descrição_Normalizada'], keep='last', inplace=True)
-    # Re-thinking: Sometimes arguably similar items HAVE different classes. 
-    # Safest approach for now is to just deduplicate exact (Desc, N4) pairs.
+    logging.info(f"Deduplication: {before_dedup} -> {len(df_combined)} rows")
     
-    after_dedup = len(df_combined)
-    logging.info(f"Merged data: {before_dedup} -> {after_dedup} unique items (Added {after_dedup - len(df_master)} new items).")
+    # Check versions in combined dataset
+    if 'added_version' in df_combined.columns:
+        version_counts = df_combined['added_version'].value_counts().to_dict()
+        logging.info(f"Rows per version after dedup: {version_counts}")
     
-    # Save updated master
+    # Save Master (KEEP Descrição_Normalizada for future deduplication)
+    df_combined.to_csv(master_file, index=False)
+    logging.info(f"Saved master dataset with {len(df_combined)} rows")
+    
+    logging.info(f"Master dataset updated with {len(df_combined)} rows.")
+
+    # --- RETRAIN MODEL (Sync or Async?) ---
+    # For now, synchronous to ensure immediate feedback, but this might timeout for large datasets.
+    # ideally trigger an async process.
+    # Re-training...
+    from src.model_trainer import train_model
+    
     try:
-        df_combined.to_csv(master_file, index=False)
-    except Exception as e:
-        logging.error(f"Failed to save master dataset: {e}")
-    
-    df_train = df_combined
-    
-    if len(df_train) < 10:
-        return func.HttpResponse(f"Not enough valid classified data for training (found {len(df_train)}, need 10).", status_code=400)
+        logging.info(f"Starting model training for sector {sector}...")
+        report = train_model(sector=sector, dataset_path=master_file)
+        logging.info("Training completed successfully.")
         
-    # Import training module
-    try:
-        from src.model_trainer import train_model_core
-        from src.ml_classifier import clear_model_cache
-        
-        # Train
-        result = train_model_core(
-            df=df_train,
-            sector=sector,
-            training_filename=filename
-        )
-        
-        # Clear model cache so next classification uses the new model
-        clear_model_cache(sector)
-        
-        # Generate Raw File (Description Only)
-        # Taking the original 'Descrição' column
-        df_raw = df[['Descrição']].copy()
-        output_raw = io.BytesIO()
-        with pd.ExcelWriter(output_raw, engine='openpyxl') as writer:
-            df_raw.to_excel(writer, index=False, sheet_name='Raw')
-        
-        raw_b64 = base64.b64encode(output_raw.getvalue()).decode("utf-8")
-        
-        # Read Report
-        report_path = os.path.join(result['artifacts_dir'], "training_report.txt")
-        if os.path.exists(report_path):
-            with open(report_path, 'r', encoding='utf-8') as f:
-                report_text = f.read()
-        else:
-            report_text = "Report file not found."
-            
         return func.HttpResponse(
             body=json.dumps({
                 "status": "success",
-                "message": "Model trained successfully",
-                "rawFileContent": raw_b64,
-                "rawFilename": f"raw_training_data_{sector}.xlsx",
-                "report": report_text,
-                "metrics": {
-                    "accuracy": result['accuracy'],
-                    "f1_macro": result['f1_macro']
-                }
+                "message": f"Modelo para setor '{sector}' treinado com sucesso!",
+                "version": next_version,
+                "total_samples": len(df_combined),
+                "report": report
             }),
             status_code=200,
             mimetype="application/json",
-            headers={
+             headers={
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "POST, OPTIONS",
                 "Access-Control-Allow-Headers": "Content-Type"
             }
         )
-        
     except Exception as e:
-        logging.error(f"Training error: {e}")
-        import traceback
-        traceback.print_exc()
-        return func.HttpResponse(
-            f"Error during training: {str(e)}",
-            status_code=500,
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "POST, OPTIONS",
-                "Access-Control-Allow-Headers": "Content-Type"
-            }
-        )
-
+        logging.error(f"Training failed: {e}")
+        return func.HttpResponse(f"Error during training: {e}", status_code=500)
 
 
 @app.function_name(name="GetModelHistory")
-@app.route(route="GetModelHistory", auth_level=func.AuthLevel.ANONYMOUS)
-def GetModelHistory(req: func.HttpRequest) -> func.HttpResponse:
+@app.route(
+    route="GetModelHistory",
+    methods=["GET", "OPTIONS"],
+    auth_level=func.AuthLevel.ANONYMOUS
+)
+def get_model_history(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Get training history for a sector.
+    """
     if req.method == "OPTIONS":
-        return func.HttpResponse(status_code=204, headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type"
-        })
-
-    sector = req.params.get("sector")
-    logging.info('Python HTTP trigger function processed a request for GetModelHistory.')
-
-    if req.method == "OPTIONS":
-        return func.HttpResponse(status_code=204, headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type"
-        })
-
-    sector = req.params.get("sector")
-    logging.info(f"GetModelHistory requested for sector: {sector}")
-
-    if not sector:
         return func.HttpResponse(
-            json.dumps({"error": "Parâmetro 'sector' é obrigatório."}),
-            status_code=400,
-            mimetype="application/json"
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type"
+            }
         )
-
-    try:
-        models_dir = os.path.join(os.path.dirname(__file__), "models")
-        sector_dir = os.path.join(models_dir, sector.lower())
-        history_file = os.path.join(sector_dir, "model_history.json")
         
-        if not os.path.exists(history_file):
-            logging.info(f"No history file found for sector: {sector}. Returning empty list.")
-            return func.HttpResponse(
-                body=json.dumps([], ensure_ascii=False),
-                status_code=200, 
-                mimetype="application/json",
-                headers={"Access-Control-Allow-Origin": "*"}
-            )
-            
+    sector = req.params.get("sector")
+    if not sector:
+        return func.HttpResponse("Missing 'sector' query parameter", status_code=400)
+        
+    sector = sector.strip().lower()
+    models_dir = "models"
+    history_file = os.path.join(models_dir, sector, "model_history.json")
+    
+    if not os.path.exists(history_file):
+        return func.HttpResponse(
+            json.dumps([]),
+            status_code=200,
+            mimetype="application/json",
+            headers={
+                "Access-Control-Allow-Origin": "*"
+            }
+        )
+        
+    try:
         with open(history_file, 'r') as f:
             history = json.load(f)
-        
-        logging.info(f"Returning history with {len(history)} entries for {sector}")
         return func.HttpResponse(
             body=json.dumps(history, ensure_ascii=False),
             status_code=200,
@@ -1523,3 +1494,232 @@ def delete_training_data(req: func.HttpRequest) -> func.HttpResponse:
     except Exception as e:
         logging.error(f"Error deleting training data: {e}")
         return func.HttpResponse(f"Error: {str(e)}", status_code=500)
+
+
+# =================================================================================================
+# NEW ENDPOINTS FOR TAXONOMY DISCOVERY & ZERO-SHOT
+# =================================================================================================
+
+@app.function_name(name="TaxonomyDiscovery")
+@app.route(
+    route="TaxonomyDiscovery",
+    methods=["POST", "OPTIONS"],
+    auth_level=func.AuthLevel.ANONYMOUS
+)
+def taxonomy_discovery(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Endpoint for Taxonomy Discovery (Case 3).
+    Receives raw file, clusters items, and returns representative samples for Copilot naming.
+    """
+    if req.method == "OPTIONS":
+        return func.HttpResponse(
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type"
+            }
+        )
+    
+    logging.info('TaxonomyDiscovery HTTP trigger function processed a request.')
+    
+    try:
+        req_body = req.get_json()
+    except ValueError:
+        return func.HttpResponse("Invalid JSON body", status_code=400)
+
+    file_content_b64 = req_body.get("fileContent")
+    
+    if not file_content_b64:
+        return func.HttpResponse("Missing fileContent", status_code=400)
+
+    try:
+        import base64
+        import io
+        import json
+        
+        # Decode file
+        file_bytes = base64.b64decode(file_content_b64)
+        
+        # Read file (Excel or CSV)
+        try:
+            df = pd.read_excel(io.BytesIO(file_bytes))
+        except:
+            try:
+                df = pd.read_csv(io.BytesIO(file_bytes), sep=';', encoding='utf-8', on_bad_lines='skip')
+            except:
+                df = pd.read_csv(io.BytesIO(file_bytes), sep=',', encoding='utf-8', on_bad_lines='skip')
+                
+        # Find description column
+        from src.taxonomy_engine import pick, COL_DESC_CANDIDATES_DEFAULT
+        desc_col = pick(df, COL_DESC_CANDIDATES_DEFAULT)
+        
+        if not desc_col:
+             return func.HttpResponse(f"Could not identify description column. Candidates checked: {COL_DESC_CANDIDATES_DEFAULT}", status_code=400)
+
+        # Get descriptions list
+        items = df[desc_col].dropna().astype(str).tolist()
+        
+        # Limit processing
+        unique_items = list(set(items))
+        if len(unique_items) > 10000:
+             logging.warning(f"Truncating discovery to 10000 unique items (from {len(unique_items)}) for performance.")
+             unique_items = unique_items[:10000]
+             
+        # Perform Clustering
+        from src.ai_discovery import cluster_items
+        clusters = cluster_items(unique_items)
+        
+        return func.HttpResponse(
+            body=json.dumps(clusters, ensure_ascii=False),
+            status_code=200,
+            mimetype="application/json",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Content-Type"
+            }
+        )
+        
+    except Exception as e:
+        logging.error(f"Error in TaxonomyDiscovery: {e}")
+        return func.HttpResponse(f"Error processing discovery: {str(e)}", status_code=500, headers={"Access-Control-Allow-Origin": "*"})
+
+
+@app.function_name(name="ZeroShotClassify")
+@app.route(
+    route="ZeroShotClassify",
+    methods=["POST", "OPTIONS"],
+    auth_level=func.AuthLevel.ANONYMOUS
+)
+def zero_shot_classify_endpoint(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Endpoint for Zero-Shot Classification (Case 4).
+    Receives raw file + List of Categories.
+    """
+    if req.method == "OPTIONS":
+        return func.HttpResponse(
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type"
+            }
+        )
+
+    logging.info('ZeroShotClassify HTTP trigger function processed a request.')
+
+    try:
+        req_body = req.get_json()
+    except ValueError:
+        return func.HttpResponse("Invalid JSON body", status_code=400)
+
+    file_content_b64 = req_body.get("fileContent")
+    categories_input = req_body.get("categories") 
+    taxonomy_file_b64 = req_body.get("taxonomyFile")
+    
+    if not file_content_b64:
+        return func.HttpResponse("Missing fileContent", status_code=400)
+    
+    # Need either categories OR taxonomyFile
+    if not categories_input and not taxonomy_file_b64:
+        return func.HttpResponse("Missing categories list or taxonomyFile", status_code=400)
+        
+    try:
+        import base64
+        import io
+        import json
+        
+        # If taxonomyFile provided, extract N4 categories from it
+        if taxonomy_file_b64 and not categories_input:
+            try:
+                taxonomy_bytes = base64.b64decode(taxonomy_file_b64)
+                taxonomy_df = pd.read_excel(io.BytesIO(taxonomy_bytes))
+                taxonomy_cols_upper = [c.upper().strip() for c in taxonomy_df.columns]
+                
+                # Find N4 column
+                n4_col = None
+                for i, col in enumerate(taxonomy_cols_upper):
+                    if col == 'N4' or col == 'CATEGORIA':
+                        n4_col = taxonomy_df.columns[i]
+                        break
+                
+                if n4_col:
+                    categories = taxonomy_df[n4_col].dropna().unique().tolist()
+                    categories = [str(c).strip() for c in categories if str(c).strip()]
+                    logging.info(f"Extracted {len(categories)} categories from taxonomy file")
+                else:
+                    return func.HttpResponse("Taxonomy file missing N4 column", status_code=400)
+            except Exception as e:
+                logging.error(f"Error reading taxonomy file: {e}")
+                return func.HttpResponse(f"Error reading taxonomy file: {str(e)}", status_code=400)
+        else:
+            # Prepare categories list from input
+            if isinstance(categories_input, str):
+                # Split by newline or comma
+                categories = [c.strip() for c in categories_input.replace('\r', '').split('\n') if c.strip()]
+            elif isinstance(categories_input, list):
+                categories = [str(c).strip() for c in categories_input if str(c).strip()]
+            else:
+                return func.HttpResponse("Invalid categories format", status_code=400)
+
+        # Decode file
+        file_bytes = base64.b64decode(file_content_b64)
+        try:
+            df = pd.read_excel(io.BytesIO(file_bytes))
+        except:
+             df = pd.read_csv(io.BytesIO(file_bytes), sep=';', encoding='utf-8', on_bad_lines='skip')
+             
+        # Find description column
+        from src.taxonomy_engine import pick, COL_DESC_CANDIDATES_DEFAULT
+        desc_col = pick(df, COL_DESC_CANDIDATES_DEFAULT)
+        
+        if not desc_col:
+             return func.HttpResponse(f"Could not identify description column.", status_code=400)
+        
+        items = df[desc_col].fillna("").astype(str).tolist()
+        
+        # Perform Classification
+        from src.ai_discovery import zero_shot_classify
+        
+        # Threshold from request or default
+        threshold = req_body.get("threshold", 0.45)
+        
+        results, analytics = zero_shot_classify(items, categories, threshold=threshold)
+        
+        # Merge results back to DF
+        result_df = pd.DataFrame(results)
+        
+        if len(result_df) == len(df):
+            df["N4_Sugerido"] = result_df["N4_Predicted"]
+            df["Confianca_IA"] = result_df["Confidence"]
+            df["Status_IA"] = result_df["Match_Type"]
+        else:
+            df = result_df
+            
+        # Generate Excel Output
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Classificacao_ZeroShot')
+            pd.DataFrame([analytics['match_distribution']]).to_excel(writer, sheet_name='Analytics', index=False)
+            
+        output.seek(0)
+        xlsx_b64 = base64.b64encode(output.getvalue()).decode("utf-8")
+        
+        return func.HttpResponse(
+            body=json.dumps({
+                "status": "success",
+                "fileContent": xlsx_b64,
+                "filename": "zero_shot_result.xlsx",
+                "analytics": analytics
+            }),
+            status_code=200,
+            mimetype="application/json",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Content-Type"
+            }
+        )
+
+    except Exception as e:
+        logging.error(f"Error in ZeroShotClassify: {e}")
+        return func.HttpResponse(f"Error processing classification: {str(e)}", status_code=500, headers={"Access-Control-Allow-Origin": "*"})

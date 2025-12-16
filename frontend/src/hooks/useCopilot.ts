@@ -47,7 +47,9 @@ interface UseCopilotReturn {
     isSending: boolean
     userMessage: string
     setUserMessage: (msg: string) => void
-    sendUserMessage: () => Promise<void>
+    sendUserMessage: (overrideMessage?: string) => Promise<void>
+    sendSilentMessage: (msg: string) => Promise<string | null>
+    injectMessage: (role: 'user' | 'bot', text: string) => void
     generateExecutiveSummary: () => Promise<void>
     resetChat: () => void
 }
@@ -145,6 +147,58 @@ export function useCopilot({ activeSession }: UseCopilotProps): UseCopilotReturn
         }
     }
 
+    // Expose a silent message sender for batch operations (Headless Mode)
+    const sendSilentMessage = async (message: string): Promise<string | null> => {
+        try {
+            const tokenData = await apiClient.getDirectLineToken()
+            const tempConversationId = tokenData.conversationId
+            const tempToken = tokenData.token
+
+            // Send message with Portuguese instruction (no JSON context)
+            const payloadText = `INSTRUCÃO: Analise os grupos de itens abaixo e sugira a Taxonomia (Categoria N4) e a Hierarquia (N1-N3) para cada um. Responda em Português do Brasil.\n\n---\nDADOS PARA ANÁLISE:\n${message}`
+
+            await apiClient.postActivity(tempConversationId, tempToken, {
+                type: 'message',
+                from: { id: 'user' },
+                text: payloadText,
+                locale: 'pt-BR'
+            })
+
+            let attempts = 0
+            const maxAttempts = 30 // 2.5 minutes timeout
+
+            const poll = async (): Promise<string | null> => {
+                if (attempts >= maxAttempts) return null
+                attempts++
+
+                try {
+                    const activityData = await apiClient.getMessagesFromCopilot(tempConversationId, tempToken)
+
+                    const botMsgs = activityData.activities?.filter((a: any) =>
+                        (a.from?.id !== 'user' && a.from.name !== 'user') &&
+                        a.type === 'message' &&
+                        a.text
+                    ).map((msg: any) =>
+                        msg.text.replace(/(?:📊|✅)?\s*AI-generated content may be incorrect[.\s]*/gi, '').trim()
+                    ) || []
+
+                    if (botMsgs.length > 0) return botMsgs.join('\n\n')
+
+                    await new Promise(r => setTimeout(r, 5000))
+                    return poll()
+                } catch (e) {
+                    console.error("Poll error", e)
+                    return null
+                }
+            }
+
+            return poll()
+        } catch (error) {
+            console.error("Silent message error", error)
+            return null
+        }
+    }
+
     // Execute a direct message without Smart Context wrapper (fallback for greetings/casual)
     const executeDirectMessage = async (userMsg: string): Promise<Message[]> => {
         try {
@@ -153,18 +207,27 @@ export function useCopilot({ activeSession }: UseCopilotProps): UseCopilotReturn
             const tempToken = tokenData.token
 
             // Send message with Portuguese instruction (no JSON context)
+            // Reverting to Prefix strategy as validated by user (Step 472)
+            const payloadText = `INSTRUCÃO: Analise os grupos de itens abaixo e sugira a Taxonomia (Categoria N4) e a Hierarquia (N1-N3) para cada um. Responda em Português do Brasil.
+            
+---
+DADOS PARA ANÁLISE:
+${userMsg}`
+
             await apiClient.postActivity(tempConversationId, tempToken, {
                 type: 'message',
                 from: { id: 'user' },
-                text: `Responda em português do Brasil: ${userMsg}`,
+                text: payloadText,
                 locale: 'pt-BR'
             })
 
             let attempts = 0
-            const maxAttempts = 12
+            const maxAttempts = 30 // Increased to 2.5 minutes for large payloads
 
             const poll = async (): Promise<Message[]> => {
-                if (attempts >= maxAttempts) return []
+                if (attempts >= maxAttempts) {
+                    return [{ from: 'bot', text: "⚠️ O Copilot demorou muito para responder. Por favor, tente novamente ou reduza a quantidade de grupos.", timestamp: new Date() }]
+                }
                 attempts++
 
                 try {
@@ -186,7 +249,7 @@ export function useCopilot({ activeSession }: UseCopilotProps): UseCopilotReturn
                     return poll()
                 } catch (e) {
                     console.error("Poll error", e)
-                    return []
+                    return [{ from: 'bot', text: "Erro de conexão ao buscar resposta.", timestamp: new Date() }]
                 }
             }
 
@@ -197,29 +260,29 @@ export function useCopilot({ activeSession }: UseCopilotProps): UseCopilotReturn
         }
     }
 
-    const sendUserMessage = async () => {
-        if (!userMessage.trim() || !sessionId) return
+    const sendUserMessage = async (overrideMessage?: string) => {
+        const msgToSend = overrideMessage || userMessage
+        if (!msgToSend.trim() || !sessionId) return
 
-        const currentMsg = userMessage
-        setUserMessage('')
+        if (!overrideMessage) setUserMessage('')
         setIsSending(true)
 
         // Add user message immediately
-        const userMsgObj: Message = { from: 'user', text: currentMsg, timestamp: new Date() }
+        const userMsgObj: Message = { from: 'user', text: msgToSend, timestamp: new Date() }
         const updatedWithUser = [...copilotMessages, userMsgObj]
         updateMessages(updatedWithUser)
 
         try {
-            const smartContext = generateSmartContext(currentMsg, activeSession?.items || [])
+            const smartContext = generateSmartContext(msgToSend, activeSession?.items || [])
 
             // If smart context found a match, use it; otherwise send message directly (fallback)
             if (smartContext) {
                 // Has context - use structured prompt
-                const responses = await executeConversationTurn(currentMsg, smartContext)
+                const responses = await executeConversationTurn(msgToSend, smartContext)
                 updateMessages([...updatedWithUser, ...responses])
             } else {
                 // No context (greeting, casual conversation) - send message directly
-                const responses = await executeDirectMessage(currentMsg)
+                const responses = await executeDirectMessage(msgToSend)
                 updateMessages([...updatedWithUser, ...responses])
             }
         } catch (err) {
@@ -228,6 +291,16 @@ export function useCopilot({ activeSession }: UseCopilotProps): UseCopilotReturn
             setIsSending(false)
         }
     }
+
+    const injectMessage = useCallback((role: 'user' | 'bot', text: string) => {
+        const newMessage: Message = { from: role, text, timestamp: new Date() }
+        setCopilotMessages(prev => {
+            const updated = [...prev, newMessage]
+            setChatHistory(updated)
+            if (sessionId) saveChatToStorage(sessionId, updated)
+            return updated
+        })
+    }, [sessionId])
 
     const generateExecutiveSummary = async () => {
         if (!activeSession || !sessionId) return
@@ -337,6 +410,8 @@ ${JSON.stringify(contextData, null, 2)}
         userMessage,
         setUserMessage,
         sendUserMessage,
+        sendSilentMessage,
+        injectMessage,
         generateExecutiveSummary,
         resetChat
     }

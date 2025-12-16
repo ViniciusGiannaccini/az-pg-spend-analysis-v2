@@ -12,12 +12,12 @@
   },
   "Sanitario | Lavatorio | Cuba": {
     "N1": "Indiretos",
-    "N2": "Expansao Civil",
+    "N2": "MRO",
     "N3": "Materiais Hidrossanitario"
   },
   "Cimento| Argamassa | Rejunte": {
     "N1": "Indiretos",
-    "N2": "MRO",
+    "N2": "Expansao Civil",
     "N3": "Materiais Construcao"
   },
   "Gestao Imobiliaria | Condominio": {
@@ -62,7 +62,7 @@
   },
   "Tubulacoes | Conexoes | Acessorios": {
     "N1": "Indiretos",
-    "N2": "MRO",
+    "N2": "Expansao Civil",
     "N3": "Materiais Hidrossanitario"
   },
   "Fixadores | Ferragens": {
@@ -272,7 +272,7 @@
   },
   "Produtos Quimicos | Lubrificantes | Desengripantes": {
     "N1": "Indiretos",
-    "N2": "MRO",
+    "N2": "Expansao Civil",
     "N3": "Materiais Construcao"
   },
   "Jogos | Brinquedos | Instrumentos Musicais": {
@@ -292,7 +292,7 @@
   },
   "Forros | Drywall": {
     "N1": "Indiretos",
-    "N2": "MRO",
+    "N2": "Expansao Civil",
     "N3": "Materiais Construcao"
   },
   "Brindes | Personalizados": {
@@ -589,5 +589,10 @@
     "N1": "Indiretos",
     "N2": "Marketing e Eventos",
     "N3": "Eventos"
+  },
+  "Movel | Fixa": {
+    "N1": "Indiretos",
+    "N2": "Tecnologia Corporativa",
+    "N3": "Servico Telefonia"
   }
 }

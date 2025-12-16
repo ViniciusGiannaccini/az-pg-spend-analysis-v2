@@ -25,6 +25,12 @@ COL_DESC_CANDIDATES_DEFAULT = [
     "Descricao",         # Portuguese without accent
     "Descrição",         # Portuguese with accent
     "Descrição do Item", # Full Portuguese name
+    "Material_Description",
+    "Description",
+    "Long_Description",
+    "Short_Description",
+    "Texto Breve",
+    "Texto Longo"
 ]
 
 # Common abbreviations found in procurement data.

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import Head from 'next/head'
 import { useRouter } from 'next/router'
 
@@ -15,6 +15,8 @@ import SectorSelect from '@/components/taxonomy/SectorSelect'
 import ClassifyTab from '@/components/taxonomy/ClassifyTab'
 import TrainTab from '@/components/taxonomy/TrainTab'
 import ModelsTab from '@/components/taxonomy/ModelsTab'
+import DiscoveryTab from '@/components/taxonomy/DiscoveryTab'
+import ZeroShotTab from '@/components/taxonomy/ZeroShotTab'
 import DownloadCard from '@/components/taxonomy/DownloadCard'
 import ChatMessage, { ChatMessageLoading } from '@/components/chat/ChatMessage'
 import ChatInput from '@/components/chat/ChatInput'
@@ -23,7 +25,10 @@ import ChatInput from '@/components/chat/ChatInput'
 const TAXONOMY_TABS = [
     { id: 'classify', label: 'Classificar Itens' },
     { id: 'train', label: 'Treinar Modelo' },
-    { id: 'models', label: 'Gerenciar Modelos' }
+    { id: 'models', label: 'Gerenciar Modelos' },
+    // HIDDEN FOR CEO DEMO - Re-enable after presentation
+    // { id: 'discovery', label: 'Descoberta', badge: 'BETA', badgeColor: 'bg-purple-100 text-purple-700' },
+    // { id: 'zeroshot', label: 'Zero-Shot', badge: 'BETA', badgeColor: 'bg-indigo-100 text-indigo-700' }
 ]
 
 export default function TaxonomyPage() {
@@ -43,9 +48,16 @@ export default function TaxonomyPage() {
         setActiveSessionId,
         handleNewUpload,
         handleFileSelect,
+        handleCreateDiscoverySession,
         handleClearHistory,
         handleDeleteSession
     } = useTaxonomySession()
+
+    // Local processing state for new tabs
+    const [localProcessing, setLocalProcessing] = useState(false)
+
+    // Combined processing state for UI blocking
+    const effectiveProcessing = isProcessing || localProcessing
 
     // Copilot chat integration (localStorage persistence is handled internally)
     const {
@@ -56,6 +68,8 @@ export default function TaxonomyPage() {
         userMessage,
         setUserMessage,
         sendUserMessage,
+        sendSilentMessage,
+        injectMessage,
         generateExecutiveSummary,
         resetChat
     } = useCopilot({ activeSession })
@@ -76,7 +90,10 @@ export default function TaxonomyPage() {
     } = useModelTraining()
 
     // Current active tab
-    const [activeTab, setActiveTab] = useState<'classify' | 'train' | 'models'>('classify')
+    const [activeTab, setActiveTab] = useState<'classify' | 'train' | 'models' | 'discovery' | 'zeroshot'>('classify')
+    // Pending message to send upon session activation
+    const [pendingMessage, setPendingMessage] = useState<string | null>(null)
+    const [pendingInjection, setPendingInjection] = useState<{ user: string, bot: string } | null>(null)
 
     // Track which session we've already generated summary for (prevents duplicates)
     const summaryGeneratedForRef = useRef<string | null>(null)
@@ -115,6 +132,23 @@ export default function TaxonomyPage() {
         }
     }, [chatHistory, copilotMessages, isCopilotLoading, isSending])
 
+    // Auto-Send Pending Message Integration
+    useEffect(() => {
+        if (activeSession && pendingMessage && !isCopilotLoading && !isSending) {
+            sendUserMessage(pendingMessage)
+            setPendingMessage(null)
+        }
+    }, [activeSession, pendingMessage, isCopilotLoading, isSending])
+
+    // Auto-Inject Pending Conversation (Batch Result)
+    useEffect(() => {
+        if (activeSession && pendingInjection) {
+            injectMessage('user', "Por favor, analise estes grupos e gere a taxonomia:") // Short prompt for display
+            injectMessage('bot', pendingInjection.bot)
+            setPendingInjection(null)
+        }
+    }, [activeSession, pendingInjection])
+
     return (
         <>
             <Head>
@@ -122,16 +156,18 @@ export default function TaxonomyPage() {
             </Head>
 
             {/* Fullscreen Processing Overlay */}
-            {isProcessing && (
-                <div className="fixed inset-0 z-[9999] bg-[#0e0330]/80 backdrop-blur-sm flex items-center justify-center">
-                    <div className="flex flex-col items-center justify-center text-center">
-                        {/* Spinner */}
-                        <div className="w-20 h-20 rounded-full border-4 border-white/20 border-t-[#38bec9] animate-spin"></div>
-                        <p className="mt-6 text-lg font-medium text-white">Classificando itens com IA...</p>
-                        <p className="mt-2 text-sm text-white/60">Isso pode levar alguns segundos</p>
+            {
+                effectiveProcessing && (
+                    <div className="fixed inset-0 z-[9999] bg-[#0e0330]/80 backdrop-blur-sm flex items-center justify-center">
+                        <div className="flex flex-col items-center justify-center text-center">
+                            {/* Spinner */}
+                            <div className="w-20 h-20 rounded-full border-4 border-white/20 border-t-[#38bec9] animate-spin"></div>
+                            <p className="mt-6 text-lg font-medium text-white">Processando com IA...</p>
+                            <p className="mt-2 text-sm text-white/60">Isso pode levar alguns segundos</p>
+                        </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Strategic Control Tower Background - Hybrid Theme */}
             <div className="min-h-screen bg-[#F5F7FA] relative overflow-hidden">
@@ -196,60 +232,91 @@ export default function TaxonomyPage() {
                             {!activeSession ? (
                                 /* Upload/Training View */
                                 <div className="flex-1 flex flex-col items-center justify-center">
-                                    <div className="floating-card max-w-5xl w-full p-8 h-[650px] flex flex-col">
+                                    <div className="floating-card max-w-5xl w-full p-8 h-[680px] flex flex-col">
                                         {/* Tabs */}
                                         <div className="mb-8 flex-shrink-0">
                                             <Tabs
                                                 tabs={TAXONOMY_TABS}
                                                 activeTab={activeTab}
-                                                onTabChange={(id) => setActiveTab(id as 'classify' | 'train' | 'models')}
-                                                disabled={isProcessing || trainingStep === 'training'}
+                                                onTabChange={(id) => setActiveTab(id as any)}
+                                                disabled={effectiveProcessing || trainingStep === 'training'}
                                             />
                                         </div>
 
-                                        {/* Sector Select */}
-                                        <div className="mb-8 flex-shrink-0">
-                                            <SectorSelect
-                                                value={sector}
-                                                onChange={setSector}
-                                                sectors={sectors}
-                                                disabled={isProcessing || trainingStep === 'training'}
-                                                isLoading={isLoadingSectors}
-                                            />
-                                        </div>
+                                        {/* Sector Select - Hidden for Discovery and ZeroShot */}
+                                        {activeTab !== 'discovery' && activeTab !== 'zeroshot' && (
+                                            <div className="mb-8 flex-shrink-0">
+                                                <SectorSelect
+                                                    value={sector}
+                                                    onChange={setSector}
+                                                    sectors={sectors}
+                                                    disabled={effectiveProcessing || trainingStep === 'training'}
+                                                    isLoading={isLoadingSectors}
+                                                />
+                                            </div>
+                                        )}
 
                                         {/* Tab Content - Scrollable Area */}
-                                        <div className="flex-1 overflow-y-auto min-h-0 pr-2 custom-scrollbar">
-                                            {activeTab === 'classify' && (
-                                                <ClassifyTab
-                                                    onFileSelect={handleFileSelect}
-                                                    isProcessing={isProcessing}
-                                                />
-                                            )}
+                                        <div className="flex-1 overflow-y-auto min-h-0 pr-2 custom-scrollbar flex flex-col">
+                                            <div className="w-full my-auto">
+                                                {activeTab === 'classify' && (
+                                                    <ClassifyTab
+                                                        onFileSelect={handleFileSelect}
+                                                        isProcessing={effectiveProcessing}
+                                                    />
+                                                )}
 
-                                            {activeTab === 'train' && (
-                                                <TrainTab
-                                                    sector={sector}
-                                                    trainingStep={trainingStep}
-                                                    trainingFile={trainingFile}
-                                                    previewData={previewData}
-                                                    validationStatus={validationStatus}
-                                                    trainingResult={trainingResult}
-                                                    onFileSelect={handleTrainingFileSelect}
-                                                    onConfirmTraining={() => confirmTraining(sector)}
-                                                    onCancelTraining={cancelTraining}
-                                                />
-                                            )}
+                                                {activeTab === 'train' && (
+                                                    <TrainTab
+                                                        sector={sector}
+                                                        trainingStep={trainingStep}
+                                                        trainingFile={trainingFile}
+                                                        previewData={previewData}
+                                                        validationStatus={validationStatus}
+                                                        trainingResult={trainingResult}
+                                                        onFileSelect={handleTrainingFileSelect}
+                                                        onConfirmTraining={() => confirmTraining(sector)}
+                                                        onCancelTraining={cancelTraining}
+                                                    />
+                                                )}
 
-                                            {activeTab === 'models' && (
-                                                <ModelsTab
-                                                    sector={sector}
-                                                    modelHistory={modelHistory}
-                                                    isProcessing={isProcessing}
-                                                    onRefresh={() => loadModelHistory(sector)}
-                                                    onRestoreModel={(versionId) => handleRestoreModel(sector, versionId)}
-                                                />
-                                            )}
+                                                {activeTab === 'models' && (
+                                                    <ModelsTab
+                                                        sector={sector}
+                                                        modelHistory={modelHistory}
+                                                        isProcessing={effectiveProcessing}
+                                                        onRefresh={() => loadModelHistory(sector)}
+                                                        onRestoreModel={(versionId) => handleRestoreModel(sector, versionId)}
+                                                    />
+                                                )}
+
+                                                {activeTab === 'discovery' && (
+                                                    <DiscoveryTab
+                                                        isProcessing={localProcessing}
+                                                        onStartProcessing={() => setLocalProcessing(true)}
+                                                        onFinishProcessing={() => setLocalProcessing(false)}
+                                                        onSendToCopilot={(msg, preCalculated) => {
+                                                            const count = msg.split('\n').filter(l => l.includes('**')).length
+                                                            handleCreateDiscoverySession(count)
+                                                            if (preCalculated) {
+                                                                setPendingInjection({ user: msg, bot: preCalculated })
+                                                            } else {
+                                                                setPendingMessage(msg)
+                                                            }
+                                                        }}
+                                                        // Pass silent sender to DiscoveryTab
+                                                        onSendSilent={sendSilentMessage}
+                                                    />
+                                                )}
+
+                                                {activeTab === 'zeroshot' && (
+                                                    <ZeroShotTab
+                                                        isProcessing={localProcessing}
+                                                        onStartProcessing={() => setLocalProcessing(true)}
+                                                        onFinishProcessing={() => setLocalProcessing(false)}
+                                                    />
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -287,10 +354,12 @@ export default function TaxonomyPage() {
                                         className="flex-1 overflow-y-auto space-y-6 mb-4 pr-2 min-h-0 p-6 floating-card"
                                     >
                                         {/* Download Card */}
-                                        <DownloadCard
-                                            downloadUrl={activeSession.downloadUrl!}
-                                            downloadFilename={activeSession.downloadFilename!}
-                                        />
+                                        {activeSession.downloadUrl && activeSession.downloadFilename && (
+                                            <DownloadCard
+                                                downloadUrl={activeSession.downloadUrl}
+                                                downloadFilename={activeSession.downloadFilename}
+                                            />
+                                        )}
 
                                         {/* All Chat Messages (Summary + Interactive) */}
                                         {copilotMessages.map((msg, idx) => (
@@ -322,6 +391,3 @@ export default function TaxonomyPage() {
         </>
     )
 }
-
-// Need to import React for useState
-import React from 'react'

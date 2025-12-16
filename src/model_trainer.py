@@ -311,3 +311,58 @@ def train_model_core(
             'high_conf_pct': (max_probas >= 0.90).mean()
         }
     }
+
+
+def train_model(sector: str, dataset_path: str) -> dict:
+    """
+    Wrapper function to train a model from a dataset file path.
+    
+    Args:
+        sector: Sector name (e.g., 'varejo', 'educacional').
+        dataset_path: Path to the CSV/Excel file containing training data.
+        
+    Returns:
+        Dict with training results and metrics.
+    """
+    logging.info(f"Loading dataset from: {dataset_path}")
+    
+    # Load the dataset
+    try:
+        if dataset_path.endswith('.csv'):
+            df = pd.read_csv(dataset_path)
+        else:
+            df = pd.read_excel(dataset_path)
+    except Exception as e:
+        logging.error(f"Error loading dataset: {e}")
+        return {"success": False, "error": f"Error loading dataset: {e}"}
+    
+    logging.info(f"Loaded {len(df)} rows from dataset")
+    
+    # Ensure normalized description column exists
+    if 'Descrição_Normalizada' not in df.columns and 'Descrição' in df.columns:
+        df['Descrição_Normalizada'] = df['Descrição'].astype(str).apply(normalize_text)
+    
+    # Get the training filename for history
+    training_filename = os.path.basename(dataset_path)
+    
+    # Call the core training function
+    result = train_model_core(
+        df=df,
+        sector=sector,
+        training_filename=training_filename
+    )
+    
+    # Format result for API response
+    if isinstance(result, dict) and 'accuracy' in result:
+        return {
+            "success": True,
+            "accuracy": result.get('accuracy', 0),
+            "f1_macro": result.get('f1_macro', 0),
+            "f1_weighted": result.get('f1_weighted', 0),
+            "artifacts_dir": result.get('artifacts_dir', ''),
+            "message": f"Model trained successfully for sector '{sector}'"
+        }
+    elif isinstance(result, dict) and 'error' in result:
+        return {"success": False, "error": result.get('error')}
+    else:
+        return {"success": True, "result": result}

@@ -310,7 +310,7 @@ export default function ModelViewerOverlay({ sector, modelHistory, onClose, onRe
                         >
                             {modelHistory.map(h => (
                                 <option key={h.version_id} value={h.version_id} className="text-gray-900">
-                                    {h.version_id} {h.status === 'active' ? '(Ativo)' : ''} - {(h.metrics.accuracy * 100).toFixed(1)}%
+                                    {h.version_id} {h.status === 'active' ? '(Ativo)' : ''} - {h.metrics?.accuracy ? `${(h.metrics.accuracy * 100).toFixed(1)}%` : 'N/A'}
                                 </option>
                             ))}
                         </select>

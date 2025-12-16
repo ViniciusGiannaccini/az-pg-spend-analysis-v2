@@ -31,6 +31,7 @@ interface UseTaxonomySessionReturn {
     setActiveSessionId: (id: string | null) => void
     handleNewUpload: () => void
     handleFileSelect: (file: File, fileContent: string, hierarchyContent?: string) => Promise<void>
+    handleCreateDiscoverySession: (clusterCount: number) => Promise<void>
     handleClearHistory: () => void
     handleDeleteSession: (sessionId: string) => void
 }
@@ -225,6 +226,23 @@ export function useTaxonomySession(): UseTaxonomySessionReturn {
         }
     }, [activeSessionId])
 
+    const handleCreateDiscoverySession = useCallback(async (clusterCount: number) => {
+        const sessionId = `discovery-${Date.now()}`
+        const newSession: TaxonomySession = {
+            sessionId,
+            filename: `Descoberta de Padrões (${clusterCount} grupos)`,
+            sector: sector,
+            timestamp: new Date().toISOString(),
+            // No download URL initially for discovery sessions
+        }
+
+        setSessions(prev => [newSession, ...prev])
+        setActiveSessionId(sessionId)
+
+        // Persist
+        await saveSession(newSession)
+    }, [sector])
+
     return {
         sessions,
         activeSessionId,
@@ -237,6 +255,7 @@ export function useTaxonomySession(): UseTaxonomySessionReturn {
         setActiveSessionId,
         handleNewUpload,
         handleFileSelect,
+        handleCreateDiscoverySession,
         handleClearHistory,
         handleDeleteSession
     }
