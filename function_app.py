@@ -44,6 +44,23 @@ if USE_ML_CLASSIFIER:
 POWER_AUTOMATE_URL = os.getenv("POWER_AUTOMATE_URL", "")
 POWER_AUTOMATE_API_KEY = os.getenv("POWER_AUTOMATE_API_KEY", "")
 
+# Models directory: Use /home/models in Azure (writable), ./models locally
+# Azure Functions has read-only /home/site/wwwroot, but /home is writable and persistent
+def get_models_dir() -> str:
+    """Get the appropriate models directory based on environment."""
+    # Check if running in Azure (WEBSITE_INSTANCE_ID is set in Azure App Service/Functions)
+    if os.getenv("WEBSITE_INSTANCE_ID") or os.getenv("AZURE_FUNCTIONS_ENVIRONMENT"):
+        azure_models = "/home/models"
+        try:
+            os.makedirs(azure_models, exist_ok=True)
+        except Exception:
+            pass  # Directory creation will be retried when needed
+        return azure_models
+    # Local development
+    return "models"
+
+MODELS_DIR = get_models_dir()
+
 
 def send_to_power_automate(filename: str, file_content_base64: str) -> bool:
     """
@@ -388,7 +405,7 @@ def process_taxonomy(req: func.HttpRequest) -> func.HttpResponse:
             from src.ml_classifier import load_model
             from src.hybrid_classifier import classify_hybrid
             logging.info(f"Attempting to load model for sector: {sector}")
-            vectorizer, classifier, label_encoder, hierarchy = load_model(sector=sector)
+            vectorizer, classifier, label_encoder, hierarchy = load_model(sector=sector, models_dir=MODELS_DIR)
             
             # Load custom hierarchy if provided
             custom_hierarchy = None
@@ -731,9 +748,8 @@ def train_model_endpoint(req: func.HttpRequest) -> func.HttpResponse:
         return func.HttpResponse(f"No valid classified data found in uploaded file.", status_code=400)
 
     # --- CUMULATIVE TRAINING LOGIC ---
-    models_dir = "models"
     sector_lower = sector.lower()
-    sector_dir = os.path.join(models_dir, sector_lower)
+    sector_dir = os.path.join(MODELS_DIR, sector_lower)
     os.makedirs(sector_dir, exist_ok=True)
     
     master_file = os.path.join(sector_dir, "dataset_master.csv")
@@ -836,7 +852,7 @@ def train_model_endpoint(req: func.HttpRequest) -> func.HttpResponse:
     
     try:
         logging.info(f"Starting model training for sector {sector}...")
-        report = train_model(sector=sector, dataset_path=master_file)
+        report = train_model(sector=sector, dataset_path=master_file, models_dir=MODELS_DIR)
         logging.info("Training completed successfully.")
         
         return func.HttpResponse(
@@ -885,8 +901,7 @@ def get_model_history(req: func.HttpRequest) -> func.HttpResponse:
         return func.HttpResponse("Missing 'sector' query parameter", status_code=400)
         
     sector = sector.strip().lower()
-    models_dir = "models"
-    history_file = os.path.join(models_dir, sector, "model_history.json")
+    history_file = os.path.join(MODELS_DIR, sector, "model_history.json")
     
     if not os.path.exists(history_file):
         return func.HttpResponse(
@@ -936,8 +951,7 @@ def set_active_model(req: func.HttpRequest) -> func.HttpResponse:
         if not sector or not version_id:
             return func.HttpResponse("Missing sector or version_id", status_code=400)
             
-        models_dir = os.path.join(os.path.dirname(__file__), "models")
-        sector_dir = os.path.join(models_dir, sector.lower())
+        sector_dir = os.path.join(MODELS_DIR, sector.lower())
         version_dir = os.path.join(sector_dir, "versions", version_id)
         
         if not os.path.exists(version_dir):
@@ -1075,8 +1089,7 @@ def get_model_info(req: func.HttpRequest) -> func.HttpResponse:
         return func.HttpResponse("Missing 'sector' parameter.", status_code=400)
     
     try:
-        models_dir = os.path.join(os.path.dirname(__file__), "models")
-        sector_dir = os.path.join(models_dir, sector.lower())
+        sector_dir = os.path.join(MODELS_DIR, sector.lower())
         training_dir = os.path.join(os.path.dirname(__file__), "training", sector.lower())
         
         # Load hierarchy using helper
@@ -1287,8 +1300,7 @@ def get_training_data(req: func.HttpRequest) -> func.HttpResponse:
         n4_filter = req.params.get("n4")
         search_filter = req.params.get("search")
         
-        models_dir = os.path.join(os.path.dirname(__file__), "models")
-        sector_dir = os.path.join(models_dir, sector.lower())
+        sector_dir = os.path.join(MODELS_DIR, sector.lower())
         master_file = os.path.join(sector_dir, "dataset_master.csv")
         
         if not os.path.exists(master_file):
@@ -1400,8 +1412,7 @@ def delete_training_data(req: func.HttpRequest) -> func.HttpResponse:
         return func.HttpResponse("Must provide 'row_ids', 'version', or 'items' to delete.", status_code=400)
     
     try:
-        models_dir = os.path.join(os.path.dirname(__file__), "models")
-        sector_dir = os.path.join(models_dir, sector.lower())
+        sector_dir = os.path.join(MODELS_DIR, sector.lower())
         master_file = os.path.join(sector_dir, "dataset_master.csv")
         
         if not os.path.exists(master_file):

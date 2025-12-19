@@ -313,18 +313,21 @@ def train_model_core(
     }
 
 
-def train_model(sector: str, dataset_path: str) -> dict:
+def train_model(sector: str, dataset_path: str, models_dir: str = "models") -> dict:
     """
     Wrapper function to train a model from a dataset file path.
     
     Args:
         sector: Sector name (e.g., 'varejo', 'educacional').
         dataset_path: Path to the CSV/Excel file containing training data.
+        models_dir: Base directory for models (defaults to 'models', but should be
+                    passed from caller when running in Azure).
         
     Returns:
         Dict with training results and metrics.
     """
     logging.info(f"Loading dataset from: {dataset_path}")
+    logging.info(f"Models directory: {models_dir}")
     
     # Load the dataset
     try:
@@ -349,6 +352,7 @@ def train_model(sector: str, dataset_path: str) -> dict:
     result = train_model_core(
         df=df,
         sector=sector,
+        models_dir=models_dir,
         training_filename=training_filename
     )
     
