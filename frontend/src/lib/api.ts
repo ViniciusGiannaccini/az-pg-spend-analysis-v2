@@ -1,9 +1,26 @@
+/**
+ * @fileoverview HTTP API client for Spend Analysis application.
+ * 
+ * This module provides the centralized API client for all HTTP communications:
+ * - Azure Function endpoints (classification, training, model management)
+ * - Microsoft Direct Line API (Copilot chat communication)
+ * 
+ * @module api
+ */
+
 import axios, { AxiosRequestConfig } from 'axios'
 
+/** Base URL for the Azure Functions API (configurable via environment) */
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:7071/api'
+
+/** Function key for Azure Functions authentication (optional, for production) */
 const FUNCTION_KEY = process.env.NEXT_PUBLIC_FUNCTION_KEY || ''
 
-// Helper to add Function Key header for Azure Functions (production only)
+/**
+ * Generates authentication headers for Azure Functions requests.
+ * Only includes the x-functions-key header when a key is configured.
+ * @returns Record containing auth headers, or empty object
+ */
 const getAuthHeaders = (): Record<string, string> => {
     if (FUNCTION_KEY) {
         return { 'x-functions-key': FUNCTION_KEY }
@@ -11,12 +28,22 @@ const getAuthHeaders = (): Record<string, string> => {
     return {}
 }
 
+/**
+ * Response from the Direct Line token endpoint.
+ */
 export interface DirectLineToken {
+    /** Unique conversation identifier */
     conversationId: string
+    /** Bearer token for Direct Line API authentication */
     token: string
+    /** Token expiration time in seconds */
     expires_in: number
 }
 
+/**
+ * Represents a classification session (deprecated - use TaxonomySession from hooks).
+ * @deprecated Use TaxonomySession from useTaxonomySession hook instead
+ */
 export interface ClassificationSession {
     sessionId: string
     filename: string
@@ -26,8 +53,25 @@ export interface ClassificationSession {
     analytics?: any
 }
 
+/**
+ * Centralized API client containing all HTTP methods for the application.
+ * 
+ * @example
+ * ```typescript
+ * // Classification
+ * const result = await apiClient.processTaxonomy(fileContent, dictContent, 'Varejo', 'file.xlsx')
+ * 
+ * // Chat
+ * const token = await apiClient.getDirectLineToken()
+ * await apiClient.sendMessageToCopilot(token.conversationId, token.token, 'Hello')
+ * ```
+ */
 export const apiClient = {
-    // Get Direct Line token for chat
+    /**
+     * Gets a temporary Direct Line token for Copilot chat communication.
+     * The token is valid for 30 minutes and should not be cached long-term.
+     * @returns Promise resolving to DirectLineToken with conversationId and token
+     */
     async getDirectLineToken(): Promise<DirectLineToken> {
         const response = await axios.get(`${API_BASE_URL}/get-token`, {
             headers: getAuthHeaders()

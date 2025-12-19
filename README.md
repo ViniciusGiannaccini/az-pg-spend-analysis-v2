@@ -1,100 +1,194 @@
-# Cenário de Demonstração - Empresa X (Educacional)
+# Spend Analysis AI Agent
 
-## Objetivo
+Sistema inteligente de classificação de gastos corporativos com Machine Learning e assistente de IA.
 
-Demonstrar como o treinamento do modelo ML melhora a taxa de classificação única.
+---
 
-## Arquivos
+## 📋 Visão Geral
 
-| Arquivo | Descrição | Linhas |
-|---------|-----------|--------|
-| `demo_empresa_x_para_classificar.xlsx` | Arquivo para classificar (SKU + Descrição) | 200 |
-| `demo_treino_empresa_x.xlsx` | Arquivo de treino (Descrição + N1/N2/N3/N4) | ~1500 |
+O **Spend Analysis AI Agent** é uma solução completa para classificação automática de dados de compras corporativas usando:
 
-## Fluxo do Demo
+- **Classificação Híbrida**: Combina Machine Learning (TF-IDF + Logistic Regression) com fallback para dicionário de palavras-chave
+- **Aprendizado Contínuo**: Treinamento incremental de modelos por setor
+- **Assistente de IA**: Copilot Studio integrado para análise contextual dos dados
+- **Smart Context**: Sistema RAG local que enriquece queries com dados relevantes
 
-### Passo 1: Classificar SEM treino adicional
+### Arquitetura
 
-1. Acesse a aplicação
-2. Na aba **Classificar Itens**, selecione setor **Educacional**
-3. Faça upload do arquivo `demo_empresa_x_para_classificar.xlsx`
-4. **Resultado esperado**: Taxa de únicos baixa (~5%)
+```mermaid
+flowchart TB
+    subgraph Frontend["Frontend (Next.js)"]
+        UI[Interface Web]
+        SC[Smart Context RAG]
+        IDB[(IndexedDB)]
+    end
+    
+    subgraph Backend["Backend (Azure Functions)"]
+        API[API Endpoints]
+        ML[ML Classifier]
+        DE[Dictionary Engine]
+        TR[Model Trainer]
+    end
+    
+    subgraph External["Serviços Externos"]
+        CP[Copilot Studio]
+        SP[SharePoint]
+    end
+    
+    UI --> API
+    UI --> SC
+    SC --> CP
+    API --> ML
+    API --> DE
+    API --> TR
+    API --> SP
+    UI --> IDB
+```
 
-### Passo 2: Treinar modelo
+---
 
-1. Vá para a aba **Treinar Modelo**
-2. Selecione setor **Educacional**
-3. Faça upload do arquivo `demo_treino_empresa_x.xlsx`
-4. Aguarde o treinamento completar
-5. **Reinicie o servidor** (`func start`) para carregar novo modelo
+## 📁 Estrutura do Projeto
 
-### Passo 3: Classificar APÓS treino
+```
+az-pg-spend-analysis/
+│
+├── 📂 Backend (Azure Functions - Python)
+│   ├── function_app.py          # Endpoints HTTP
+│   ├── src/                     # Módulos de negócio
+│   │   ├── taxonomy_engine.py   # Classificação por dicionário
+│   │   ├── hybrid_classifier.py # Classificação híbrida ML+Dict
+│   │   ├── ml_classifier.py     # Classificador ML puro
+│   │   ├── model_trainer.py     # Treinamento de modelos
+│   │   ├── preprocessing.py     # Normalização de texto
+│   │   └── taxonomy_mapper.py   # Hierarquia customizada
+│   ├── models/                  # Artefatos ML por setor
+│   ├── tests/                   # Testes unitários
+│   └── docs/                    # 📖 Documentação Backend
+│
+├── 📂 frontend/ (Next.js - TypeScript)
+│   ├── src/
+│   │   ├── components/          # Componentes React
+│   │   ├── hooks/               # Custom Hooks (sessões, chat)
+│   │   ├── lib/                 # API client, database, Smart Context
+│   │   └── pages/               # Páginas da aplicação
+│   ├── public/                  # Assets e dicionário
+│   └── docs/                    # 📖 Documentação Frontend
+│
+└── README.md                    # Este arquivo
+```
 
-1. Na aba **Classificar Itens**, selecione setor **Educacional**
-2. Faça upload do mesmo arquivo `demo_empresa_x_para_classificar.xlsx`
-3. **Resultado esperado**: Taxa de únicos significativamente maior
+---
 
-## Categorias no Cenário
+## 📖 Documentação Detalhada
 
-O arquivo de treino cobre 8 categorias N4:
+| Área | Documentação |
+|------|--------------|
+| **Backend** | [docs/README.md](./docs/README.md) - Arquitetura, API, ML, Treinamento |
+| **Frontend** | [frontend/docs/README.md](./frontend/docs/README.md) - Componentes, Hooks, Smart Context |
 
-- Frutas | Coffe | Desjejum
-- Papelaria Administrativa  
-- Suprimento Didatico
-- Materiais Limpeza | Higiene
-- Outros Equipamentos T.I
-- Outros Materiais Eletricos
-- Restaurante | Copa | Cozinha
-- Acessorios Mobiliario
+---
 
-## Importante
-
-> ⚠️ **O servidor precisa ser reiniciado após o treinamento** para carregar o novo modelo ML. Isso é porque o modelo é cacheado em memória.
-
-
-## Rodando Localmente
+## 🚀 Quick Start
 
 ### Backend (Azure Functions)
-1. Instale o [Azure Functions Core Tools](https://learn.microsoft.com/en-us/azure/azure-functions/functions-run-local).
-2. Vá para a pasta raiz `az-pg-spend-analysis`.
-3. Crie um arquivo `local.settings.json` com suas credenciais.
-4. Inicie o servidor:
-   ```bash
-   func start
-   ```
+
+```bash
+# 1. Instale Azure Functions Core Tools
+# 2. Configure local.settings.json
+# 3. Inicie o servidor
+cd az-pg-spend-analysis
+func start
+```
 
 ### Frontend (Next.js)
-1. Vá para a pasta `frontend`.
-2. Instale as dependências: `npm install`.
-3. Crie um arquivo `.env.local` e configure:
-   ```
-   NEXT_PUBLIC_API_URL=http://localhost:7071/api
-   NEXT_PUBLIC_FUNCTION_KEY= (vazio localmente)
-   ```
-4. Inicie o servidor:
-   ```bash
-   npm run dev
-   ```
 
-## Deploy
+```bash
+# 1. Instale dependências
+cd frontend
+npm install
 
-### 1. Backend (Azure Functions)
-**Importante**: As rotas agora são `AuthLevel.ANONYMOUS` para permitir CORS sem problemas. A segurança deve ser gerenciada via configurações de rede da Azure ou API Gateway se necessário.
+# 2. Configure .env.local
+echo "NEXT_PUBLIC_API_URL=http://localhost:7071/api" > .env.local
 
-1. Login na Azure: `az login`
-2. Deploy via CLI:
-   ```bash
-   func azure functionapp publish <NOME_DA_SUA_FUNCTION_APP>
-   ```
-   *Nota: O arquivo `.funcignore` já está configurado para incluir a pasta `models` e excluir dados de treinamento brutos.*
+# 3. Inicie o servidor
+npm run dev
+```
 
-### 2. Frontend (Vercel)
-1. Instale a Vercel CLI: `npm i -g vercel`
-2. Na pasta raiz, rode: `vercel`
-3. Configure as variáveis de ambiente na Vercel:
-   - `NEXT_PUBLIC_API_URL`: URL da sua Azure Function (ex: `https://sua-function.azurewebsites.net/api`)
-   - `NEXT_PUBLIC_FUNCTION_KEY`: Sua System Key da Azure Function (embora as rotas sejam anônimas, o front ainda envia o header).
+---
 
-## Limpeza
+## ⚙️ Configuração
 
-Para restaurar o modelo original após o demo, delete a versão criada na aba **Gerenciar Modelos**.
+### Backend - `local.settings.json`
+
+```json
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "USE_ML_CLASSIFIER": "true",
+    "DIRECT_LINE_SECRET": "<seu_secret>",
+    "POWER_AUTOMATE_URL": "<url_flow_sharepoint>"
+  }
+}
+```
+
+### Frontend - `.env.local`
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:7071/api
+NEXT_PUBLIC_FUNCTION_KEY=
+```
+
+---
+
+## 🧪 Testes
+
+```bash
+# Backend - Testes unitários
+cd az-pg-spend-analysis
+source .venv/bin/activate
+pytest tests/ -v
+
+# Frontend - Build check
+cd frontend
+npm run build
+```
+
+---
+
+## 📦 Deploy
+
+### Backend → Azure Functions
+
+```bash
+az login
+func azure functionapp publish <NOME_DA_FUNCTION_APP>
+```
+
+### Frontend → Vercel
+
+```bash
+cd frontend
+vercel
+```
+
+---
+
+## 🔑 Funcionalidades Principais
+
+| Funcionalidade | Descrição |
+|----------------|-----------|
+| **Classificação Híbrida** | ML com fallback automático para dicionário |
+| **Multi-Setor** | Modelos independentes por setor (Varejo, Educacional, etc.) |
+| **Treinamento Cumulativo** | Novos dados complementam histórico |
+| **Hierarquia Customizada** | Cliente pode sobrescrever taxonomia |
+| **Versionamento de Modelos** | Histórico e rollback de versões |
+| **Smart Context** | RAG local para queries ao Copilot |
+| **Persistência** | Sessões em IndexedDB, chat em localStorage |
+| **Analytics** | Pareto, Gaps, Ambiguidade automáticos |
+
+---
+
+## 📄 Licença
+
+Projeto interno P&G - AI Team.

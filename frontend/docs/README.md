@@ -149,6 +149,7 @@ sequenceDiagram
 
 ## Última Atualização
 
-**Data**: 2025-12-13  
-**Versão**: 1.1.0  
-**Mudanças**: Adicionada persistência IndexedDB e localStorage
+**Data**: 2025-12-19  
+**Versão**: 1.2.0  
+**Mudanças**: JSDoc adicionado a todos os hooks e módulos lib
+

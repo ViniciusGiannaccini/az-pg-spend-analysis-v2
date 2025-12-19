@@ -1,5 +1,26 @@
+/**
+ * @fileoverview Entity Extractor for Smart Context queries.
+ * 
+ * This module extracts structured entities from natural language queries:
+ * - Numbers (top N, threshold values)
+ * - Terms (quoted text, keywords)
+ * - Hierarchy levels (N1, N2, N3, N4)
+ * - Category names (fuzzy matching against dataset)
+ * - Classification status (unique, ambiguous, unclassified)
+ * 
+ * Uses Levenshtein distance for fuzzy matching category names.
+ * 
+ * @module smart-context/entity-extractor
+ */
 
-// Levenshtein distance helper (Same as before, moved here)
+/**
+ * Calculates the Levenshtein edit distance between two strings.
+ * Used for fuzzy matching category names in user queries.
+ * 
+ * @param a - First string
+ * @param b - Second string
+ * @returns Number of single-character edits needed to transform a into b
+ */
 export const levenshtein = (a: string, b: string): number => {
     if (!a || !b) return (a || b).length;
     const matrix = Array.from({ length: b.length + 1 }, (_, i) => [i])
@@ -24,19 +45,58 @@ export const levenshtein = (a: string, b: string): number => {
     return matrix[b.length][a.length]
 }
 
+/**
+ * Normalizes text for comparison: removes accents and converts to lowercase.
+ * @param s - Input string
+ * @returns Normalized string
+ */
 export const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
 
+/**
+ * Result of entity extraction from a user query.
+ * Contains all structured entities that were identified.
+ */
 export interface EntityExtractionResult {
+    /** Category name found via fuzzy matching (e.g., "Indiretos") */
     category?: string;
+    /** Hierarchy level specified in query (N1, N2, N3, or N4) */
     level?: 'N1' | 'N2' | 'N3' | 'N4';
+    /** Target level for hierarchical queries */
     targetLevel?: 'N1' | 'N2' | 'N3' | 'N4';
+    /** Type of target: item, category, or word */
     targetType?: 'item' | 'category' | 'word';
+    /** Numeric value for top-N queries or limits */
     number?: number;
+    /** Search term extracted from query */
     term?: string;
+    /** Threshold for outlier detection (e.g., character count) */
     threshold?: number;
-    status?: 'unique' | 'ambiguous' | 'unclassified' | 'all'; // New field for classification status queries
+    /** Classification status filter */
+    status?: 'unique' | 'ambiguous' | 'unclassified' | 'all';
 }
 
+/**
+ * Extracts structured entities from a natural language query.
+ * 
+ * Processes the query to identify:
+ * 1. Numbers (e.g., "Top 5", "10 items")
+ * 2. Terms (quoted strings or after "termo")
+ * 3. Target types (items vs categories)
+ * 4. Status filters (unique, ambiguous)
+ * 5. Hierarchy levels (N1-N4)
+ * 6. Category names (fuzzy matched against dataset)
+ * 7. Thresholds (e.g., "menos de 5 caracteres")
+ * 
+ * @param query - The user's natural language question
+ * @param items - Array of classified items to search for category matches
+ * @returns EntityExtractionResult with all identified entities
+ * 
+ * @example
+ * ```typescript
+ * const entities = extractEntities("Top 10 categorias N2 de Indiretos", items);
+ * // entities = { number: 10, level: 'N2', category: 'Indiretos', targetType: 'category' }
+ * ```
+ */
 export const extractEntities = (query: string, items: any[]): EntityExtractionResult => {
     const queryNorm = normalize(query);
     const result: EntityExtractionResult = {};

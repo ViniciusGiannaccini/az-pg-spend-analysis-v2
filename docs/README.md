@@ -78,11 +78,11 @@ sequenceDiagram
     loop Each item
         A->>M: classify_hybrid()
         M->>M: ML prediction
-        alt Confidence >= 0.70
+        alt Confidence >= 0.45
             M-->>A: "Único" (ML)
-        else Confidence 0.40-0.69
+        else Confidence 0.25-0.44
             M-->>A: "Ambíguo" (ML)
-        else Confidence < 0.40
+        else Confidence < 0.25
             M->>D: Dictionary fallback
             D-->>A: Dict result or "Nenhum"
         end
@@ -94,8 +94,8 @@ sequenceDiagram
 
 ---
 
-## Quick Links
+## Última Atualização
 
-- [Como funciona o classificador híbrido](./ML-CLASSIFICATION.md)
-- [Endpoints disponíveis](./API-ENDPOINTS.md)
-- [Como treinar novos modelos](./TRAINING.md)
+**Data**: 2025-12-19  
+**Versão**: 1.2.0  
+**Mudanças**: Thresholds de confiança atualizados (0.45/0.25)

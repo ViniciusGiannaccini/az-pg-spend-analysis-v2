@@ -1,9 +1,51 @@
+/**
+ * @fileoverview Execution Engine for Smart Context queries.
+ * 
+ * This module executes the detected intent against the classified items dataset,
+ * generating appropriate data payloads for each intent type:
+ * 
+ * - COUNT_FILTERED: Count items matching criteria
+ * - TOP_N_RANKING / BOTTOM_N_RANKING: Rank categories by frequency
+ * - PARETO_ANALYSIS: Calculate 80/20 distribution (Curve A)
+ * - DISTRIBUTION: Show percentage breakdown
+ * - TERM_SEARCH / TERM_EXCEPTION: Find items containing terms
+ * - OUTLIER_DETECTION: Find short/vague descriptions
+ * - CATEGORY_LOOKUP: Show category statistics
+ * - GAP_ANALYSIS: Find missing subcategories
+ * - HIERARCHY_LOOKUP: Show full taxonomy path
+ * 
+ * @module smart-context/execution-engine
+ */
 
 import { IntentType, ContextPayload } from './types'
 import { EntityExtractionResult, normalize } from './entity-extractor'
 
+/** Formats an array of strings as a comma-separated quoted list */
 const formatList = (items: string[]) => items.map(i => `"${i}"`).join(', ');
 
+/**
+ * Executes an intent against the classified items dataset.
+ * 
+ * This is the main execution function that:
+ * 1. Filters items based on extracted entities (category scope)
+ * 2. Executes the appropriate data operation for the intent
+ * 3. Returns a structured ContextPayload for the Copilot
+ * 
+ * @param intent - The detected IntentType from the router
+ * @param entities - Extracted entities from the query
+ * @param originalItems - Full array of classified items from the session
+ * @returns ContextPayload with data and instructions, or null if cannot execute
+ * 
+ * @example
+ * ```typescript
+ * const payload = executeIntent(
+ *   IntentType.TOP_N_RANKING,
+ *   { number: 10, level: 'N2' },
+ *   classifiedItems
+ * );
+ * // Returns { data: { type: 'top_highest_frequency', ... }, ... }
+ * ```
+ */
 export const executeIntent = (
     intent: IntentType,
     entities: EntityExtractionResult,

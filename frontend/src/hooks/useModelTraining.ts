@@ -1,36 +1,94 @@
+/**
+ * @fileoverview Hook for managing ML model training workflow.
+ * 
+ * This module provides the hook for the model training feature:
+ * - Training file upload and validation
+ * - Multi-step training workflow (upload → preview → training → result)
+ * - Model version history and rollback
+ * 
+ * @module useModelTraining
+ */
+
 import { useState, useCallback } from 'react'
 import { apiClient } from '@/lib/api'
 import * as XLSX from 'xlsx'
 
+/**
+ * Represents a single validation check result.
+ */
 interface ValidationCheck {
+    /** Human-readable label for the check */
     label: string
+    /** Result status: 'ok' (passed), 'warning' (passed with notes), 'error' (failed) */
     status: 'ok' | 'warning' | 'error'
+    /** Detailed message explaining the check result */
     message: string
 }
 
+/**
+ * Overall validation status for a training file.
+ */
 interface ValidationStatus {
+    /** True if all required checks passed (no errors) */
     isValid: boolean
+    /** Percentage score (0-100) based on data completeness */
     score: number
+    /** Array of individual check results */
     checks: ValidationCheck[]
 }
 
+/**
+ * Return type for the useModelTraining hook.
+ */
 interface UseModelTrainingReturn {
     // State
+    /** Current step in the training workflow */
     trainingStep: 'upload' | 'preview' | 'training' | 'result'
+    /** Selected training file with its base64 content */
     trainingFile: { file: File; content: string } | null
+    /** Preview of first 10 rows for user review */
     previewData: any[]
+    /** Validation results for the training file */
     validationStatus: ValidationStatus | null
+    /** Result returned from the training API */
     trainingResult: any | null
+    /** History of model versions for the current sector */
     modelHistory: any[]
 
     // Actions
+    /** Handles file selection and triggers validation */
     handleTrainingFileSelect: (file: File, fileContent: string) => void
+    /** Confirms training and sends request to backend */
     confirmTraining: (sector: string) => Promise<void>
+    /** Cancels training and returns to upload step */
     cancelTraining: () => void
+    /** Loads model version history for a sector */
     loadModelHistory: (sector: string) => Promise<void>
+    /** Restores a previous model version as active */
     handleRestoreModel: (sector: string, versionId: string) => Promise<void>
 }
 
+/**
+ * Custom hook for managing the ML model training workflow.
+ * 
+ * Provides a multi-step wizard-like experience for training new models:
+ * 1. Upload: User selects a training file (Excel with Descrição, N1-N4)
+ * 2. Preview: File is validated and previewed for confirmation
+ * 3. Training: File is sent to backend for cumulative training
+ * 4. Result: Training metrics are displayed
+ * 
+ * @returns Object containing training state and action methods
+ * 
+ * @example
+ * ```tsx
+ * const {
+ *   trainingStep,
+ *   validationStatus,
+ *   handleTrainingFileSelect,
+ *   confirmTraining
+ * } = useModelTraining()
+ * ```
+ */
 export function useModelTraining(): UseModelTrainingReturn {
     const [trainingStep, setTrainingStep] = useState<'upload' | 'preview' | 'training' | 'result'>('upload')
     const [trainingFile, setTrainingFile] = useState<{ file: File; content: string } | null>(null)

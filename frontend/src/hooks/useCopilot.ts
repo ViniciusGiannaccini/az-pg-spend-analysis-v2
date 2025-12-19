@@ -1,3 +1,15 @@
+/**
+ * @fileoverview Hook for managing Copilot chat communication via Microsoft Direct Line.
+ * 
+ * This module provides the main hook for interacting with the AI Copilot, including:
+ * - Stateless RAG (Retrieval-Augmented Generation) for each conversation turn
+ * - Smart Context integration for enriching queries with relevant data
+ * - Executive Summary generation from classification results
+ * - Chat history persistence via localStorage
+ * 
+ * @module useCopilot
+ */
+
 import { useState, useCallback, useEffect } from 'react'
 import { apiClient } from '@/lib/api'
 import { generateSmartContext, formatSmartContextMessage } from '@/lib/smart-context'
@@ -6,8 +18,15 @@ import type { Message } from '@/components/chat/ChatMessage'
 // ============================================
 // LocalStorage Utilities
 // ============================================
+
+/** Prefix for chat storage keys in localStorage */
 const STORAGE_PREFIX = 'pg_spend_chat_'
 
+/**
+ * Retrieves chat messages from localStorage for a specific session.
+ * @param sessionId - The unique identifier of the taxonomy session
+ * @returns Array of Message objects, or empty array if not found
+ */
 const getChatFromStorage = (sessionId: string): Message[] => {
     if (typeof window === 'undefined') return []
     try {
@@ -24,6 +43,11 @@ const getChatFromStorage = (sessionId: string): Message[] => {
     }
 }
 
+/**
+ * Saves chat messages to localStorage for a specific session.
+ * @param sessionId - The unique identifier of the taxonomy session
+ * @param messages - Array of Message objects to persist
+ */
 const saveChatToStorage = (sessionId: string, messages: Message[]) => {
     if (typeof window === 'undefined') return
     try {
@@ -36,27 +60,61 @@ const saveChatToStorage = (sessionId: string, messages: Message[]) => {
 // ============================================
 // Hook Interface
 // ============================================
+
+/** Props for the useCopilot hook */
 interface UseCopilotProps {
+    /** The currently active taxonomy session, or null if none selected */
     activeSession: any | null
 }
 
+/** Return type for the useCopilot hook */
 interface UseCopilotReturn {
+    /** Array of messages displayed in the chat UI */
     copilotMessages: Message[]
+    /** Full chat history (may differ from displayed during loading states) */
     chatHistory: Message[]
+    /** True when the Copilot is generating the initial Executive Summary */
     isCopilotLoading: boolean
+    /** True when a user message is being sent and awaiting response */
     isSending: boolean
+    /** Current value of the user input field */
     userMessage: string
+    /** Updates the user input field value */
     setUserMessage: (msg: string) => void
+    /** Sends a user message to the Copilot with Smart Context enrichment */
     sendUserMessage: (overrideMessage?: string) => Promise<void>
+    /** Sends a message without updating UI (for batch operations) */
     sendSilentMessage: (msg: string) => Promise<string | null>
+    /** Manually injects a message into the chat history */
     injectMessage: (role: 'user' | 'bot', text: string) => void
+    /** Generates an Executive Summary from classification results */
     generateExecutiveSummary: () => Promise<void>
+    /** Resets the chat state (loading flags and input) */
     resetChat: () => void
 }
 
 // ============================================
 // Main Hook
 // ============================================
+
+/**
+ * Custom hook for managing Copilot chat communication.
+ * 
+ * Implements a stateless RAG architecture where each user message creates
+ * a new Direct Line conversation to ensure context isolation with Smart Context.
+ * 
+ * @param props - Configuration including the active taxonomy session
+ * @returns Object containing chat state and action methods
+ * 
+ * @example
+ * ```tsx
+ * const {
+ *   copilotMessages,
+ *   sendUserMessage,
+ *   generateExecutiveSummary
+ * } = useCopilot({ activeSession })
+ * ```
+ */
 export function useCopilot({ activeSession }: UseCopilotProps): UseCopilotReturn {
     const sessionId = activeSession?.sessionId || null
 

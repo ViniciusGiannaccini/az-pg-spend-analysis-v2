@@ -15,8 +15,6 @@ import SectorSelect from '@/components/taxonomy/SectorSelect'
 import ClassifyTab from '@/components/taxonomy/ClassifyTab'
 import TrainTab from '@/components/taxonomy/TrainTab'
 import ModelsTab from '@/components/taxonomy/ModelsTab'
-import DiscoveryTab from '@/components/taxonomy/DiscoveryTab'
-import ZeroShotTab from '@/components/taxonomy/ZeroShotTab'
 import DownloadCard from '@/components/taxonomy/DownloadCard'
 import ChatMessage, { ChatMessageLoading } from '@/components/chat/ChatMessage'
 import ChatInput from '@/components/chat/ChatInput'
@@ -25,10 +23,7 @@ import ChatInput from '@/components/chat/ChatInput'
 const TAXONOMY_TABS = [
     { id: 'classify', label: 'Classificar Itens' },
     { id: 'train', label: 'Treinar Modelo' },
-    { id: 'models', label: 'Gerenciar Modelos' },
-    // HIDDEN FOR CEO DEMO - Re-enable after presentation
-    // { id: 'discovery', label: 'Descoberta', badge: 'BETA', badgeColor: 'bg-purple-100 text-purple-700' },
-    // { id: 'zeroshot', label: 'Zero-Shot', badge: 'BETA', badgeColor: 'bg-indigo-100 text-indigo-700' }
+    { id: 'models', label: 'Gerenciar Modelos' }
 ]
 
 export default function TaxonomyPage() {
@@ -48,7 +43,6 @@ export default function TaxonomyPage() {
         setActiveSessionId,
         handleNewUpload,
         handleFileSelect,
-        handleCreateDiscoverySession,
         handleClearHistory,
         handleDeleteSession
     } = useTaxonomySession()
@@ -232,7 +226,7 @@ export default function TaxonomyPage() {
                             {!activeSession ? (
                                 /* Upload/Training View */
                                 <div className="flex-1 flex flex-col items-center justify-center">
-                                    <div className="floating-card max-w-5xl w-full p-8 h-[680px] flex flex-col">
+                                    <div className="floating-card max-w-5xl w-full p-8 h-[650px] flex flex-col">
                                         {/* Tabs */}
                                         <div className="mb-8 flex-shrink-0">
                                             <Tabs
@@ -290,32 +284,7 @@ export default function TaxonomyPage() {
                                                     />
                                                 )}
 
-                                                {activeTab === 'discovery' && (
-                                                    <DiscoveryTab
-                                                        isProcessing={localProcessing}
-                                                        onStartProcessing={() => setLocalProcessing(true)}
-                                                        onFinishProcessing={() => setLocalProcessing(false)}
-                                                        onSendToCopilot={(msg, preCalculated) => {
-                                                            const count = msg.split('\n').filter(l => l.includes('**')).length
-                                                            handleCreateDiscoverySession(count)
-                                                            if (preCalculated) {
-                                                                setPendingInjection({ user: msg, bot: preCalculated })
-                                                            } else {
-                                                                setPendingMessage(msg)
-                                                            }
-                                                        }}
-                                                        // Pass silent sender to DiscoveryTab
-                                                        onSendSilent={sendSilentMessage}
-                                                    />
-                                                )}
 
-                                                {activeTab === 'zeroshot' && (
-                                                    <ZeroShotTab
-                                                        isProcessing={localProcessing}
-                                                        onStartProcessing={() => setLocalProcessing(true)}
-                                                        onFinishProcessing={() => setLocalProcessing(false)}
-                                                    />
-                                                )}
                                             </div>
                                         </div>
                                     </div>

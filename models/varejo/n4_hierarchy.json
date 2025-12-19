@@ -107,11 +107,11 @@
     "N3": "Benefícios",
     "N4": "Plano de Saúde"
   },
-  "Consultorias Estratégicas ": {
+  "Consultorias Estratégicas": {
     "N1": "Indiretos",
     "N2": "Serviços Especializados",
     "N3": "Serviços de Consultoria",
-    "N4": "Consultorias Estratégicas "
+    "N4": "Consultorias Estratégicas"
   },
   "Leite em Pó Desnatado": {
     "N1": "Diretos",
@@ -271,7 +271,7 @@
   },
   "Mobilidade": {
     "N1": "Indiretos",
-    "N2": "Viagens Corporativas ",
+    "N2": "Viagens Corporativas",
     "N3": "Agência de Viagens",
     "N4": "Mobilidade"
   },
@@ -311,11 +311,11 @@
     "N3": "Publicidade e Propaganda",
     "N4": "Material Promocional"
   },
-  "Projetos e Engenharia ": {
+  "Projetos e Engenharia": {
     "N1": "Indiretos",
     "N2": "Serviços Especializados",
     "N3": "Pesquisa e Desenvolvimento",
-    "N4": "Projetos e Engenharia "
+    "N4": "Projetos e Engenharia"
   },
   "Energia (concessionária)": {
     "N1": "Indiretos",
@@ -331,7 +331,7 @@
   },
   "Despesas com Hotel": {
     "N1": "Indiretos",
-    "N2": "Viagens Corporativas ",
+    "N2": "Viagens Corporativas",
     "N3": "Agência de Viagens",
     "N4": "Despesas com Hotel"
   },
@@ -373,7 +373,7 @@
   },
   "Despesas com Aéreo": {
     "N1": "Indiretos",
-    "N2": "Viagens Corporativas ",
+    "N2": "Viagens Corporativas",
     "N3": "Agência de Viagens",
     "N4": "Despesas com Aéreo"
   },
@@ -907,7 +907,7 @@
   },
   "Cartão Viagens": {
     "N1": "Indiretos",
-    "N2": "Viagens Corporativas ",
+    "N2": "Viagens Corporativas",
     "N3": "Agência de Viagens",
     "N4": "Cartão Viagens"
   },

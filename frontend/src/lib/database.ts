@@ -1,13 +1,34 @@
+/**
+ * @fileoverview IndexedDB persistence layer for taxonomy sessions.
+ * 
+ * This module provides the database abstraction for storing taxonomy sessions
+ * locally in the browser using IndexedDB via the `idb` library.
+ * 
+ * Sessions are persisted with all their data (summary, analytics, items,
+ * and file content) to enable full recovery after page reload.
+ * 
+ * @module database
+ */
+
 import { openDB, DBSchema, IDBPDatabase } from 'idb'
 import type { TaxonomySession } from '@/hooks/useTaxonomySession'
 
 // ============================================
 // Database Schema
 // ============================================
+
+/**
+ * IndexedDB schema definition for the Spend Analysis database.
+ * Currently contains a single object store for sessions.
+ */
 interface SpendAnalysisDB extends DBSchema {
+    /** Object store for taxonomy sessions, keyed by sessionId */
     sessions: {
-        key: string // sessionId
+        /** Primary key: sessionId */
+        key: string
+        /** Stored value: complete TaxonomySession object */
         value: TaxonomySession
+        /** Indexes for efficient querying */
         indexes: { 'by-timestamp': string }
     }
 }
@@ -15,7 +36,11 @@ interface SpendAnalysisDB extends DBSchema {
 // ============================================
 // Database Connection
 // ============================================
+
+/** Database name in IndexedDB */
 const DB_NAME = 'pg-spend-analysis'
+
+/** Current database schema version */
 const DB_VERSION = 1
 
 let dbPromise: Promise<IDBPDatabase<SpendAnalysisDB>> | null = null

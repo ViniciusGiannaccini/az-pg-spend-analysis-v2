@@ -3,11 +3,11 @@ Hybrid Classification: ML + Dictionary Fallback + Disambiguation
 
 This module orchestrates the classification logic:
 1. Try ML classifier first
-2. If high confidence (>=0.70): "Único" (ML)
-3. If medium confidence (0.40-0.69): Try Dictionary to disambiguate
+2. If high confidence (>=0.45): "Único" (ML)
+3. If medium confidence (0.25-0.44): Try Dictionary to disambiguate
    - If Dictionary = "Único": Use Dictionary result
    - Else: "Ambíguo" with hierarchical level detection
-4. If low confidence (<0.40): Dictionary fallback
+4. If low confidence (<0.25): Dictionary fallback
 5. Return complete taxonomy (N1, N2, N3, N4) + matched terms + ambiguity info
 """
 
@@ -61,7 +61,8 @@ class ClassificationResult:
         source: str,  # "ML" or "Dictionary" or "None"
         ambiguous_n4s: Optional[List[str]] = None,
         ambiguity_level: Optional[str] = None,  # "N1", "N2", "N3", "N4"
-        ambiguous_options: Optional[List[str]] = None  # Options at ambiguous level
+        ambiguous_options: Optional[List[str]] = None,  # Options at ambiguous level
+        top_candidates: Optional[List[Dict]] = None  # ML top candidates for hierarchy remapping
     ):
         self.status = status
         self.n4 = n4
@@ -74,6 +75,7 @@ class ClassificationResult:
         self.ambiguous_n4s = ambiguous_n4s or []
         self.ambiguity_level = ambiguity_level
         self.ambiguous_options = ambiguous_options or []
+        self.top_candidates = top_candidates or []
     
     def to_dict(self) -> Dict:
         """Convert to dictionary format."""
@@ -88,7 +90,8 @@ class ClassificationResult:
             'classification_source': self.source,
             'ambiguous_n4s': self.ambiguous_n4s,
             'ambiguity_level': self.ambiguity_level,
-            'ambiguous_options': self.ambiguous_options
+            'ambiguous_options': self.ambiguous_options,
+            'top_candidates': self.top_candidates
         }
 
 
@@ -111,11 +114,11 @@ def classify_hybrid(
     
     Decision logic:
     1. Try ML classifier first
-    2. If confidence >= 0.70 -> "Único" (ML prediction)
-    3. If confidence 0.40-0.69 -> Try Dictionary to disambiguate
+    2. If confidence >= 0.45 -> "Único" (ML prediction)
+    3. If confidence 0.25-0.44 -> Try Dictionary to disambiguate
        - If Dictionary = "Único" -> Use Dictionary result
        - Else -> "Ambíguo" with hierarchical level detection
-    4. If confidence < 0.40 -> Try dictionary fallback
+    4. If confidence < 0.25 -> Try dictionary fallback
        - If dictionary matches -> Use dictionary result
        - If no match -> "Nenhum" (Não Classificado)
     
@@ -168,7 +171,8 @@ def classify_hybrid(
             n1=ml_n1,
             matched_terms=[],
             confidence=ml_confidence,
-            source="ML"
+            source="ML",
+            top_candidates=top_candidates
         )
     
     # Decision 2: Medium confidence -> Ambíguo (ML)
@@ -212,7 +216,8 @@ def classify_hybrid(
             source="ML",
             ambiguous_n4s=ambiguous_n4s,
             ambiguity_level=ambiguity_level,
-            ambiguous_options=ambiguous_options
+            ambiguous_options=ambiguous_options,
+            top_candidates=top_candidates
         )
     
     # Decision 3: Low confidence -> Try Dictionary fallback
