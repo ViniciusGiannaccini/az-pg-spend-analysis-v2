@@ -88,31 +88,69 @@ az-pg-spend-analysis/
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start (Primeira Vez)
 
-### Backend (Azure Functions)
+### Pré-requisitos
+
+| Ferramenta | Versão | Instalação |
+|------------|--------|------------|
+| Python | 3.10+ | [python.org](https://www.python.org/downloads/) |
+| Node.js | 18+ | [nodejs.org](https://nodejs.org/) |
+| Azure Functions Core Tools | 4.x | `npm install -g azure-functions-core-tools@4` |
+
+---
+
+### Backend (Azure Functions - Python)
 
 ```bash
-# 1. Instale Azure Functions Core Tools
-# 2. Configure local.settings.json
-# 3. Inicie o servidor
+# 1. Navegue até a pasta do backend
 cd az-pg-spend-analysis
+
+# 2. Crie e ative o ambiente virtual Python
+python -m venv .venv
+source .venv/bin/activate   # Mac/Linux
+# .venv\Scripts\activate    # Windows
+
+# 3. Instale as dependências Python
+pip install -r requirements.txt
+
+# 4. Configure as variáveis de ambiente
+cp local.settings.json.example local.settings.json
+# Edite local.settings.json com suas credenciais (DIRECT_LINE_SECRET, etc.)
+
+# 5. Inicie o servidor backend
 func start
 ```
 
-### Frontend (Next.js)
+> ⚠️ O backend roda em `http://localhost:7071/api`
+
+---
+
+### Frontend (Next.js - TypeScript)
 
 ```bash
-# 1. Instale dependências
+# 1. Navegue até a pasta do frontend
 cd frontend
+
+# 2. Instale as dependências Node.js
 npm install
 
-# 2. Configure .env.local
+# 3. Configure as variáveis de ambiente
 echo "NEXT_PUBLIC_API_URL=http://localhost:7071/api" > .env.local
+echo "NEXT_PUBLIC_FUNCTION_KEY=" >> .env.local
 
-# 3. Inicie o servidor
+# 4. Inicie o servidor frontend
 npm run dev
 ```
+
+> ⚠️ O frontend roda em `http://localhost:3000`
+
+---
+
+### Verificar Instalação
+
+1. **Backend**: Acesse `http://localhost:7071/api/get-token` - deve retornar JSON
+2. **Frontend**: Acesse `http://localhost:3000` - deve exibir a interface
 
 ---
 
