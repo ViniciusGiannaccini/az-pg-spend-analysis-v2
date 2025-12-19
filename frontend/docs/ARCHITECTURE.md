@@ -221,8 +221,8 @@ flowchart TD
     AA --> AB
     AB --> AC[saveChatToStorage → localStorage]
     AC --> AD{Usuário clica Fechar}
-    AD -->|Sim| AE[setActiveSessionId(null)]
-    AE --> A[Retorna à Home das Abas]
+    AD -->|Sim| AE["setActiveSessionId(null)"]
+    AE --> A["Retorna à Home das Abas"]
 ```
 
 ---
