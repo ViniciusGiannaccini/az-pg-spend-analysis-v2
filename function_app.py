@@ -16,30 +16,6 @@ from datetime import datetime, timedelta
 import uuid
 import requests
 
-import azure.functions as func
-import pandas as pd
-
-from src.taxonomy_engine import (
-    classify_items,
-    COL_DESC_CANDIDATES_DEFAULT,
-)
-
-# Import custom hierarchy mapper
-from src.taxonomy_mapper import load_custom_hierarchy, apply_custom_hierarchy
-
-# ML-enhanced classification (optional, falls back to dictionary-only if disabled)
-USE_ML_CLASSIFIER = os.getenv("USE_ML_CLASSIFIER", "false").lower() == "true"
-
-# Import ML functions if enabled (models loaded on-demand per sector)
-if USE_ML_CLASSIFIER:
-    try:
-        from src.ml_classifier import load_model
-        from src.hybrid_classifier import classify_hybrid
-        logging.info("ML classification enabled. Models will be loaded on-demand per sector.")
-    except Exception as e:
-        logging.warning(f"Failed to import ML modules: {e}. Falling back to dictionary-only mode.")
-        USE_ML_CLASSIFIER = False
-
 # Power Automate Flow URL for saving classified files to SharePoint
 POWER_AUTOMATE_URL = os.getenv("POWER_AUTOMATE_URL", "")
 POWER_AUTOMATE_API_KEY = os.getenv("POWER_AUTOMATE_API_KEY", "")
@@ -107,17 +83,36 @@ def send_to_power_automate(filename: str, file_content_base64: str) -> bool:
         logging.warning(f"Error sending file to Power Automate: {e}")
         return False
 
+def safe_json_dumps(obj):
+    """
+    Safely serialize object to JSON, replacing NaN/Inf with None (null).
+    """
+    import json
+    import math
+    
+    def clean_obj(inner_obj):
+        if isinstance(inner_obj, dict):
+            return {k: clean_obj(v) for k, v in inner_obj.items()}
+        elif isinstance(inner_obj, list):
+            return [clean_obj(i) for i in inner_obj]
+        elif isinstance(inner_obj, float):
+            if math.isnan(inner_obj) or math.isinf(inner_obj):
+                return None
+        return inner_obj
+        
+    return json.dumps(clean_obj(obj), ensure_ascii=False)
 
+
+import azure.functions as func
 app = func.FunctionApp()
 
 
-@app.function_name(name="GetDirectLineToken")
 @app.route(
     route="get-token",
-    methods=["GET", "OPTIONS"],  # Adicionado OPTIONS para CORS preflight
+    methods=["GET", "OPTIONS"],
     auth_level=func.AuthLevel.ANONYMOUS
 )
-def get_direct_line_token(req: func.HttpRequest) -> func.HttpResponse:
+def GetDirectLineToken(req: func.HttpRequest) -> func.HttpResponse:
     """
     Generate a temporary Direct Line token for the frontend to use.
     
@@ -148,9 +143,9 @@ def get_direct_line_token(req: func.HttpRequest) -> func.HttpResponse:
     if not direct_line_secret:
         logging.error("DIRECT_LINE_SECRET environment variable not configured")
         return func.HttpResponse(
-            json.dumps({"error": "Direct Line not configured"}),
+            body=safe_json_dumps({"error": "Direct Line not configured"}),
             status_code=500,
-            mimetype="application/json"
+            mimetype="application/json",
         )
     
     try:
@@ -176,7 +171,7 @@ def get_direct_line_token(req: func.HttpRequest) -> func.HttpResponse:
             }
             
             return func.HttpResponse(
-                body=json.dumps(conversation_data),
+                body=safe_json_dumps(conversation_data),
                 status_code=200,
                 mimetype="application/json",
                 headers=headers
@@ -184,7 +179,7 @@ def get_direct_line_token(req: func.HttpRequest) -> func.HttpResponse:
         else:
             logging.error(f"Direct Line API error: {response.status_code} - {response.text}")
             return func.HttpResponse(
-                json.dumps({"error": "Failed to create conversation"}),
+                safe_json_dumps({"error": "Failed to create conversation"}),
                 status_code=response.status_code,
                 mimetype="application/json"
             )
@@ -192,26 +187,32 @@ def get_direct_line_token(req: func.HttpRequest) -> func.HttpResponse:
     except requests.exceptions.RequestException as e:
         logging.error(f"Request to Direct Line API failed: {e}")
         return func.HttpResponse(
-            json.dumps({"error": "Network error contacting Direct Line"}),
+            safe_json_dumps({"error": "Network error contacting Direct Line"}),
             status_code=500,
             mimetype="application/json"
         )
     except Exception as e:
         logging.error(f"Unexpected error in get_direct_line_token: {e}")
         return func.HttpResponse(
-            json.dumps({"error": "Internal server error"}),
+            safe_json_dumps({"error": "Internal server error"}),
             status_code=500,
             mimetype="application/json"
         )
 
 
-@app.function_name(name="ProcessTaxonomy")
 @app.route(
     route="ProcessTaxonomy",
-    methods=["POST", "OPTIONS"],  # Adicionado OPTIONS para CORS preflight
+    methods=["POST", "OPTIONS"],
     auth_level=func.AuthLevel.ANONYMOUS
 )
-def process_taxonomy(req: func.HttpRequest) -> func.HttpResponse:
+def ProcessTaxonomy(req: func.HttpRequest) -> func.HttpResponse:
+    import pandas as pd
+    from src.taxonomy_mapper import load_custom_hierarchy, apply_custom_hierarchy
+    from src.taxonomy_engine import COL_DESC_CANDIDATES_DEFAULT
+    USE_ML_CLASSIFIER = os.getenv("USE_ML_CLASSIFIER", "false").lower() == "true"
+    AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")
+    # Enable LLM if key is present and not the placeholder
+    USE_LLM = bool(AZURE_OPENAI_KEY and "SUA-CHAVE" not in AZURE_OPENAI_KEY)
     """
     Process an uploaded Excel file and perform taxonomy classification based on a provided dictionary.
 
@@ -252,19 +253,26 @@ def process_taxonomy(req: func.HttpRequest) -> func.HttpResponse:
     sector = req_body.get("sector")
     original_filename = req_body.get("originalFilename", "")
     custom_hierarchy_b64 = req_body.get("customHierarchy")
+    client_context = req_body.get("clientContext", "")
+
+    # Defensive check: sometimes frontend might send strings "undefined" or "null" instead of actual nulls/empty
+    if dict_content_b64 in ["undefined", "null", "None"]: dict_content_b64 = None
+    if custom_hierarchy_b64 in ["undefined", "null", "None"]: custom_hierarchy_b64 = None
 
     if not file_content_b64:
         logging.error("Missing fileContent in request.")
         return func.HttpResponse(
-            json.dumps({"error": "Parâmetro 'fileContent' (base64) é obrigatório."}),
+            safe_json_dumps({"error": "Parâmetro 'fileContent' (base64) é obrigatório."}),
             status_code=400,
             mimetype="application/json"
         )
 
-    if not dict_content_b64:
+    if not dict_content_b64 and not custom_hierarchy_b64:
+        logging.error("Missing both dictionaryContent and customHierarchy.")
         return func.HttpResponse(
-            "Parâmetro 'dictionaryContent' (base64) é obrigatório no corpo da requisição.",
-            status_code=400
+            safe_json_dumps({"error": "É necessário fornecer um Dicionário ou uma Hierarquia Customizada."}),
+            status_code=400,
+            mimetype="application/json"
         )
     
     if not sector:
@@ -296,75 +304,50 @@ def process_taxonomy(req: func.HttpRequest) -> func.HttpResponse:
             status_code=400
         )
 
+    # Load items file first as it's mandatory
     try:
         df_items = pd.read_excel(io.BytesIO(file_bytes))
-        logging.info("Successfully parsed file as Excel")
-    except (pd.errors.ParserError, ValueError, KeyError) as e:
-        # If Excel fails, try CSV with different delimiters
-        logging.warning(f"Excel parsing failed ({type(e).__name__}), trying CSV with semicolon")
-        try:
-            # Try semicolon first (common in Brazil/Europe)
-            df_items = pd.read_csv(io.BytesIO(file_bytes), sep=';', encoding='utf-8', on_bad_lines='skip')
-            logging.info("Successfully parsed file as CSV with semicolon separator")
-        except (pd.errors.ParserError, UnicodeDecodeError) as e2:
-            logging.warning(f"Semicolon CSV parsing failed ({type(e2).__name__}), trying comma")
-            try:
-                # Try comma
-                df_items = pd.read_csv(io.BytesIO(file_bytes), sep=',', encoding='utf-8', on_bad_lines='skip')
-                logging.info("Successfully parsed file as CSV with comma separator")
-            except Exception as e3:
-                logging.error(f"All parsing attempts failed. Last error: {type(e3).__name__}: {e3}")
-                return func.HttpResponse(
-                    f"Error reading items file. Supported formats: Excel (.xlsx, .xls) or CSV (.csv) with ';' or ',' separator. Error: {str(e3)}",
-                    status_code=500
-                )
-
-    try:
-        # Parse dictionary as XLSX and read CONFIG sheet
-        df_config = pd.read_excel(io.BytesIO(dict_bytes), sheet_name='CONFIG')
-        logging.info(f"CONFIG sheet loaded: {len(df_config)} rows")
-        
-        # Lookup sector in CONFIG sheet to get dictionary sheet name
-        # Filter out NaN rows and perform case-insensitive lookup
-        df_config_valid = df_config.dropna(subset=['Setor'])
-        sector_row = df_config_valid[df_config_valid['Setor'].str.strip().str.lower() == sector.strip().lower()]
-        
-        if sector_row.empty:
-            available_sectors = df_config_valid['Setor'].dropna().tolist()
-            logging.error(f"Sector '{sector}' not found in CONFIG sheet. Available sectors: {available_sectors}")
-            return func.HttpResponse(
-                f"Setor '{sector}' não encontrado na aba CONFIG. Setores disponíveis: {', '.join(available_sectors)}",
-                status_code=400
-            )
-        
-        dict_sheet_name = sector_row.iloc[0]['ABA_DICIONARIO']
-        logging.info(f"Sector '{sector}' mapped to dictionary sheet: '{dict_sheet_name}'")
-        
-        # Read dictionary from the specified sheet
-        try:
-            df_dict = pd.read_excel(io.BytesIO(dict_bytes), sheet_name=dict_sheet_name)
-            logging.info(f"Successfully loaded dictionary from sheet '{dict_sheet_name}': {len(df_dict)} rows, {len(df_dict.columns)} columns")
-        except ValueError as e:
-            logging.error(f"Dictionary sheet '{dict_sheet_name}' not found in XLSX file: {e}")
-            return func.HttpResponse(
-                f"Aba de dicionário '{dict_sheet_name}' não encontrada no arquivo XLSX.",
-                status_code=500
-            )
-            
-    except ValueError as e:
-        if "CONFIG" in str(e):
-            logging.error(f"CONFIG sheet not found in dictionary XLSX: {e}")
-            return func.HttpResponse(
-                "Aba 'CONFIG' não encontrada no arquivo de dicionário XLSX.",
-                status_code=500
-            )
-        raise
+        logging.info("Successfully parsed items file as Excel")
     except Exception as e:
-        logging.error(f"Error reading dictionary XLSX: {type(e).__name__}: {e}")
-        return func.HttpResponse(
-            f"Erro ao ler arquivo de dicionário XLSX: {str(e)}",
-            status_code=500
-        )
+        logging.warning(f"Excel parsing failed for items, trying CSV: {e}")
+        try:
+            df_items = pd.read_csv(io.BytesIO(file_bytes), sep=';', encoding='utf-8', on_bad_lines='skip')
+            logging.info("Successfully parsed items as CSV (semicolon)")
+        except Exception:
+            try:
+                df_items = pd.read_csv(io.BytesIO(file_bytes), sep=',', encoding='utf-8', on_bad_lines='skip')
+                logging.info("Successfully parsed items as CSV (comma)")
+            except Exception as e3:
+                return func.HttpResponse(f"Error reading items file: {str(e3)}", status_code=400)
+
+    # Dictionary is optional if customHierarchy is provided (Exclusive Mode)
+    df_dict = pd.DataFrame()
+    if dict_content_b64:
+        try:
+            dict_bytes = base64.b64decode(dict_content_b64)
+            # Parse dictionary CONFIG sheet
+            df_config = pd.read_excel(io.BytesIO(dict_bytes), sheet_name='CONFIG')
+            
+            # Lookup sector
+            df_config_valid = df_config.dropna(subset=['Setor'])
+            sector_row = df_config_valid[df_config_valid['Setor'].str.strip().str.lower() == sector.strip().lower()]
+            
+            if sector_row.empty and sector.lower() != "padrão":
+                available = df_config_valid['Setor'].dropna().unique().tolist()
+                return func.HttpResponse(f"Setor '{sector}' não encontrado. Disponíveis: {', '.join(available)}", status_code=400)
+            
+            if not sector_row.empty:
+                dict_sheet_name = sector_row.iloc[0]['ABA_DICIONARIO']
+                df_dict = pd.read_excel(io.BytesIO(dict_bytes), sheet_name=dict_sheet_name)
+                logging.info(f"Loaded dictionary '{dict_sheet_name}': {len(df_dict)} rows")
+            else:
+                logging.info(f"Sector '{sector}' not in dictionary. Proceeding in LLM-Only/Exclusive mode.")
+        except Exception as e:
+            logging.error(f"Error loading dictionary: {e}")
+            if not custom_hierarchy_b64:
+                return func.HttpResponse(f"Erro ao carregar dicionário: {str(e)}", status_code=400)
+    else:
+        logging.info("Activating Exclusive Mode (No default dictionary provided).")
 
     logging.info(f"Items file OK: {len(df_items)} rows, {len(df_items.columns)} columns")
     logging.info(f"Dictionary OK: {len(df_dict)} rows, {len(df_dict.columns)} columns")
@@ -385,7 +368,7 @@ def process_taxonomy(req: func.HttpRequest) -> func.HttpResponse:
     df_items["Item_Description"] = df_items[desc_source_col]
 
     dict_records = df_dict.to_dict(orient="records")
-    item_records = df_items.to_dict(orient="records")
+    # item_records = df_items.to_dict(orient="records") # REMOVED: Memory hog for 60k rows
 
     try:
         # Use ML-enhanced hybrid classifier if enabled
@@ -396,16 +379,43 @@ def process_taxonomy(req: func.HttpRequest) -> func.HttpResponse:
             logging.info("Importing taxonomy engine...")
             from src.taxonomy_engine import build_patterns, normalize_text, generate_analytics
             
-            logging.info("Building dictionary patterns...")
-            # Build dictionary patterns
-            patterns_by_n4, terms_by_n4, taxonomy_by_n4 = build_patterns(df_dict)
+            # Decide if we use LLM fallback
+            # Logic: If sector is "Padrão", we force LLM usage (if configured). 
+            # If sector is specific but we have LLM configured, we can use it as fallback.
+            use_llm_fallback = USE_LLM
+            if sector == "Padrão" and not USE_LLM:
+                logging.warning("Sector is 'Padrão' but Azure OpenAI key is missing. Classification may fail.")
             
-            logging.info("Loading ML models...")
-            # Load ML models once
+            # Build dictionary patterns only if provided and NOT in Padrão mode
+            patterns_by_n4, terms_by_n4, taxonomy_by_n4 = None, None, None
+            if dict_content_b64 and sector.lower() != "padrão":
+                logging.info("Building dictionary patterns...")
+                patterns_by_n4, terms_by_n4, taxonomy_by_n4 = build_patterns(df_dict)
+            else:
+                logging.info(f"Skipping dictionary patterns (Sector: {sector}).")
+            
+            # Load ML model
+            model_sector = sector if sector else "Varejo"
+            if custom_hierarchy_b64:
+                logging.info(f"Exclusive Mode: Using ML model '{model_sector}' as semantic base for custom hierarchy.")
+            else:
+                logging.info(f"Standard Mode: Using hybrid classifier with sector: {model_sector}")
+                if sector == "Padrão": 
+                     logging.info("Using Standard Mode (UNSPSC) with LLM.")
+            
             from src.ml_classifier import load_model
             from src.hybrid_classifier import classify_hybrid
-            logging.info(f"Attempting to load model for sector: {sector}")
-            vectorizer, classifier, label_encoder, hierarchy = load_model(sector=sector, models_dir=MODELS_DIR)
+            
+            vectorizer, classifier, label_encoder, hierarchy = None, None, None, None
+            
+            # Only load ML model if NOT Padrão (or if you want to use a fallback like Varejo for Padrão, but Padrão implies UNSPSC/LLM)
+            if model_sector != "Padrão":
+                try:
+                    vectorizer, classifier, label_encoder, hierarchy = load_model(sector=model_sector, models_dir=MODELS_DIR)
+                except Exception as e:
+                    logging.warning(f"Failed to load model for {model_sector}: {e}. Proceeding without ML.")
+            else:
+                 logging.info("Skipping ML model load for sector 'Padrão'. Relying on LLM.")
             
             # Load custom hierarchy if provided
             custom_hierarchy = None
@@ -418,16 +428,17 @@ def process_taxonomy(req: func.HttpRequest) -> func.HttpResponse:
             
             # Load description column
             desc_column = "Item_Description"
-            df_items["_desc_original"] = df_items[desc_column].fillna("")
-            df_items["_desc_norm"] = df_items["_desc_original"].map(normalize_text)
+            df_items["_desc_original"] = df_items[desc_column].fillna("").astype(str)
+            df_items["_desc_norm"] = df_items["_desc_original"].map(normalize_text).astype(str)
             
-            # Process each item with hybrid classifier
-            results = []
-            for _, row in df_items.iterrows():
-                desc = row["_desc_original"]
-                desc_norm = row["_desc_norm"]
-                
-                result = classify_hybrid(
+            # 1. OPTIMIZATION: Setup Cache for Hybrid Classification
+            from functools import lru_cache
+            from src.taxonomy_mapper import apply_custom_hierarchy
+
+            @lru_cache(maxsize=10000)
+            def classify_cached(desc, desc_norm):
+                # Core classification (Dictionary + ML)
+                return classify_hybrid(
                     description=desc,
                     sector=sector,
                     dict_patterns=patterns_by_n4,
@@ -437,43 +448,147 @@ def process_taxonomy(req: func.HttpRequest) -> func.HttpResponse:
                     vectorizer=vectorizer,
                     classifier=classifier,
                     label_encoder=label_encoder,
-                    hierarchy=hierarchy
+                    hierarchy=hierarchy or custom_hierarchy, # Pass either ML hierarchy or Custom hierarchy
+                    use_llm_fallback=use_llm_fallback,
+                    client_context=client_context
+                ).to_dict()
+                
+                # 2. OPTIMIZATION: Apply Custom Hierarchy inside the cache pass
+                if custom_hierarchy:
+                    top_candidates = result.get('top_candidates', [])
+                    if not top_candidates and result.get('N4'):
+                        top_candidates = [{'N4': result['N4']}]
+                    
+                    custom_res, matched_n4 = apply_custom_hierarchy(top_candidates, custom_hierarchy)
+                    
+                    if custom_res:
+                        # Found a match in custom hierarchy - OVERRIDE results
+                        result['N1'] = custom_res.get('N1', '')
+                        result['N2'] = custom_res.get('N2', '')
+                        result['N3'] = custom_res.get('N3', '')
+                        result['N4'] = custom_res.get('N4', '')
+                        # Maintain consistency in results
+                        result['classification_source'] = f"Custom (via {result['classification_source']})"
+                    else:
+                        # No match found in custom hierarchy - Clear and mark as Nenhum (per requirement)
+                        if result.get('status') == 'Único':
+                            original_n4 = result.get('N4', '')
+                            result['N1'] = ''
+                            result['N2'] = ''
+                            result['N3'] = ''
+                            result['N4'] = ''
+                            result['status'] = 'Nenhum'
+                            if original_n4:
+                                result['matched_terms'] = [f'Original: {original_n4}']
+                
+                return result
+
+            # Process each item using the optimized cached function with periodic progress logging
+            logging.info(f"Processing {len(df_items)} items with hybrid classifier (caching enabled)...")
+            results = []
+            total_items = len(df_items)
+            col_orig_idx = df_items.columns.get_loc("_desc_original")
+            col_norm_idx = df_items.columns.get_loc("_desc_norm")
+            
+            # OPTIMIZATION: If sector is "Padrão", use batch LLM classification directly
+            if sector == "Padrão":
+                logging.info(f"Padrão mode detected: Using batch parallel LLM classification for {total_items} items.")
+                from src.llm_classifier import classify_items_with_llm
+                from src.hybrid_classifier import ClassificationResult
+                
+                descriptions = df_items["_desc_original"].tolist()
+                llm_results = classify_items_with_llm(
+                    descriptions, 
+                    sector=sector, 
+                    client_context=client_context, 
+                    custom_hierarchy=hierarchy or custom_hierarchy
                 )
                 
-                results.append(result.to_dict())
-            
-            # Apply custom hierarchy if provided (with fallback to top candidates)
-            if custom_hierarchy:
-                for r in results:
-                    # Build top_candidates list from result
-                    top_candidates = r.get('top_candidates', [])
-                    if not top_candidates and r.get('N4'):
-                        # If no top_candidates, at least try the main N4
-                        top_candidates = [{'N4': r['N4']}]
+                # Convert LLM dicts to the format expected by the frontend
+                for res in llm_results:
+                    # Map LLM result to match ClassificationResult/to_dict structure
+                    formatted = {
+                        "N1": res.get("N1", ""),
+                        "N2": res.get("N2", ""),
+                        "N3": res.get("N3", ""),
+                        "N4": res.get("N4", ""),
+                        "status": "Único" if res.get("N1") else "Nenhum",
+                        "matched_terms": [],
+                        "ml_confidence": res.get("confidence", 0.0),
+                        "classification_source": "LLM (UNSPSC Batch)",
+                        "ambiguous_options": []
+                    }
+                    results.append(formatted)
                     
-                    # Try to find a matching N4 in custom hierarchy
-                    custom_result, matched_n4 = apply_custom_hierarchy(top_candidates, custom_hierarchy)
+                logging.info(f"Batch LLM classification completed for {total_items} items.")
+            else:
+                # Standard Loop for Retail/Dictionary-First modes (already fast)
+                # First pass: Dictionary + ML ONLY (Local)
+                logging.info("Starting First Pass: Local classification (ML + Dictionary)...")
+                
+                # We temporarily disable LLM fallback for the first pass to collect items that need it
+                for i, row in enumerate(df_items.itertuples(index=False), 1):
+                    desc_orig = str(row[col_orig_idx])
+                    desc_norm = str(row[col_norm_idx])
                     
-                    if custom_result:
-                        # Found a match - use custom hierarchy
-                        r['N1'] = custom_result.get('N1', '')
-                        r['N2'] = custom_result.get('N2', '')
-                        r['N3'] = custom_result.get('N3', '')
-                        r['N4'] = custom_result.get('N4', '')
+                    # Force use_llm_fallback to False for the loop to avoid sequential calls
+                    result = classify_hybrid(
+                        description=desc_orig,
+                        sector=sector,
+                        dict_patterns=patterns_by_n4,
+                        dict_terms=terms_by_n4,
+                        dict_taxonomy=taxonomy_by_n4,
+                        desc_norm=desc_norm,
+                        vectorizer=vectorizer,
+                        classifier=classifier,
+                        label_encoder=label_encoder,
+                        hierarchy=hierarchy or custom_hierarchy,
+                        use_llm_fallback=False, # DISABLED in first pass
+                        client_context=client_context
+                    ).to_dict()
+                    
+                    results.append(result)
+                    
+                    if i % 50 == 0 or i == total_items:
+                        percentage = (i / total_items) * 100
+                        logging.info(f"Local Progress: {i}/{total_items} items processed ({percentage:.1f}%)")
+
+                # Second pass: Batch LLM for remaining "Nenhum" (if LLM is enabled)
+                if USE_LLM:
+                    unclassified_indices = [idx for idx, res in enumerate(results) if res['status'] == 'Nenhum']
+                    
+                    if unclassified_indices:
+                        num_to_llm = len(unclassified_indices)
+                        logging.info(f"Starting Second Pass: Sending {num_to_llm} unclassified items to LLM in batch...")
+                        
+                        from src.llm_classifier import classify_items_with_llm
+                        unclassified_descs = [df_items.iloc[idx]["_desc_original"] for idx in unclassified_indices]
+                        
+                        llm_batch_results = classify_items_with_llm(
+                            unclassified_descs,
+                            sector=sector,
+                            client_context=client_context,
+                            custom_hierarchy=hierarchy or custom_hierarchy
+                        )
+                        
+                        # Merge LLM results back into the results list
+                        for i, res in enumerate(llm_batch_results):
+                            if res.get("N1"): # If LLM found a match
+                                target_idx = unclassified_indices[i]
+                                results[target_idx].update({
+                                    "N1": res.get("N1", ""),
+                                    "N2": res.get("N2", ""),
+                                    "N3": res.get("N3", ""),
+                                    "N4": res.get("N4", ""),
+                                    "status": "Único",
+                                    "ml_confidence": res.get("confidence", 0.0),
+                                    "classification_source": "LLM (UNSPSC Fallback Batch)"
+                                })
+                        logging.info(f"Second pass completed. {num_to_llm} items processed via LLM.")
                     else:
-                        # No match found in custom hierarchy - mark as unclassified
-                        if r.get('status') == 'Único':
-                            # Keep original classification in a note BEFORE clearing
-                            original_n4 = r.get('N4', '')
-                            r['N1'] = ''
-                            r['N2'] = ''
-                            r['N3'] = ''
-                            r['N4'] = ''
-                            r['status'] = 'Nenhum'
-                            if original_n4:
-                                r['matched_terms'] = [f'Original: {original_n4}']
+                        logging.info("All items classified locally. Skipping LLM pass.")
             
-            # Convert results to DataFrame columns
+            # Convert results back to DataFrame columns
             df_items["N1"] = [r["N1"] for r in results]
             df_items["N2"] = [r["N2"] for r in results]
             df_items["N3"] = [r["N3"] for r in results]
@@ -508,16 +623,22 @@ def process_taxonomy(req: func.HttpRequest) -> func.HttpResponse:
             # Generate analytics
             analytics = generate_analytics(df_items)
             
-            # Prepare output
-            items_output = df_items.drop(columns=["_desc_norm"]).to_dict(orient="records")
+            # 7. Prepare and Return Response
+            # Only convert first 1000 to dict for front-end safety (JSON response size)
+            items_preview = df_items.head(1000).drop(columns=["_desc_norm"], errors="ignore").to_dict(orient="records")
             
             result = {
-                "items": items_output,
+                "items": items_preview,
                 "summary": summary,
                 "analytics": analytics,
             }
+            
+            # NOTE: We keep the full df_items for Excel generation below!
         else:
             logging.info("Using dictionary-only classifier")
+            # Only convert to dict if we are actually using the dictionary-only path
+            item_records = df_items.to_dict(orient="records")
+            from src.taxonomy_engine import classify_items
             result = classify_items(
                 dict_records=dict_records,
                 item_records=item_records,
@@ -535,7 +656,7 @@ def process_taxonomy(req: func.HttpRequest) -> func.HttpResponse:
 
     logging.info("===== FINAL CLASSIFICATION SUMMARY =====")
     try:
-        logging.info(json.dumps(result["summary"], ensure_ascii=False, default=str))
+        logging.info(safe_json_dumps(result["summary"]))
     except Exception as e:
         logging.error(f"Error logging summary: {type(e).__name__}: {e}")
 
@@ -553,11 +674,12 @@ def process_taxonomy(req: func.HttpRequest) -> func.HttpResponse:
         return row_offset
 
     try:
-        df_result = pd.DataFrame(result["items"])
+        # CRITICAL FIX: Use df_items (FULL) for Excel, not result["items"] (TRUNCATED PREVIEW)
+        df_result = df_items.copy()
         
         # Clean up internal columns used for processing
-        if "_desc_original" in df_result.columns:
-            df_result = df_result.drop(columns=["_desc_original"])
+        cols_to_drop = ["_desc_original", "_desc_norm", "Ambiguous_Options"]
+        df_result = df_result.drop(columns=[c for c in cols_to_drop if c in df_result.columns])
         
         # Generate Excel with multiple sheets
         output = io.BytesIO()
@@ -620,15 +742,17 @@ def process_taxonomy(req: func.HttpRequest) -> func.HttpResponse:
             "filename": filename,
             "summary": result["summary"],
             "analytics": analytics_json,
-            "items": result["items"],  # Return all items for frontend context calculation
+            "items": result["items"],  # Already truncated to 1000 in Step 7
             "timestamp": timestamp,
             "encoding": "base64"
         }
         
-        logging.info("Process completed successfully. Returning JSON (truncated analytics) + Excel (complete).")
+        logging.info(f"Process completed successfully. Keys in response: {list(response_data.keys())}")
+        if response_data.get("summary"):
+            logging.info(f"Summary data being sent: {response_data['summary']}")
         
         return func.HttpResponse(
-            body=json.dumps(response_data, ensure_ascii=False),
+            body=safe_json_dumps(response_data),
             status_code=200,
             mimetype="application/json",
             headers={
@@ -650,13 +774,13 @@ def process_taxonomy(req: func.HttpRequest) -> func.HttpResponse:
             }
         )
 
-@app.function_name(name="TrainModel")
 @app.route(
     route="TrainModel",
     methods=["POST", "OPTIONS"],
     auth_level=func.AuthLevel.ANONYMOUS
 )
-def train_model_endpoint(req: func.HttpRequest) -> func.HttpResponse:
+def TrainModel(req: func.HttpRequest) -> func.HttpResponse:
+    import pandas as pd
     """
     Train a model for a specific sector using a provided classification file.
     Generates a 'Raw' file for testing as well.
@@ -856,7 +980,7 @@ def train_model_endpoint(req: func.HttpRequest) -> func.HttpResponse:
         logging.info("Training completed successfully.")
         
         return func.HttpResponse(
-            body=json.dumps({
+            body=safe_json_dumps({
                 "status": "success",
                 "message": f"Modelo para setor '{sector}' treinado com sucesso!",
                 "version": next_version,
@@ -876,13 +1000,12 @@ def train_model_endpoint(req: func.HttpRequest) -> func.HttpResponse:
         return func.HttpResponse(f"Error during training: {e}", status_code=500)
 
 
-@app.function_name(name="GetModelHistory")
 @app.route(
     route="GetModelHistory",
     methods=["GET", "OPTIONS"],
     auth_level=func.AuthLevel.ANONYMOUS
 )
-def get_model_history(req: func.HttpRequest) -> func.HttpResponse:
+def GetModelHistory(req: func.HttpRequest) -> func.HttpResponse:
     """
     Get training history for a sector.
     """
@@ -917,7 +1040,7 @@ def get_model_history(req: func.HttpRequest) -> func.HttpResponse:
         with open(history_file, 'r') as f:
             history = json.load(f)
         return func.HttpResponse(
-            body=json.dumps(history, ensure_ascii=False),
+            body=safe_json_dumps(history),
             status_code=200,
             mimetype="application/json",
             headers={
@@ -929,13 +1052,13 @@ def get_model_history(req: func.HttpRequest) -> func.HttpResponse:
     except Exception as e:
         return func.HttpResponse(f"Error fetching history: {str(e)}", status_code=500)
 
-@app.function_name(name="SetActiveModel")
 @app.route(
     route="SetActiveModel",
     methods=["POST", "OPTIONS"],
     auth_level=func.AuthLevel.ANONYMOUS
 )
-def set_active_model(req: func.HttpRequest) -> func.HttpResponse:
+def SetActiveModel(req: func.HttpRequest) -> func.HttpResponse:
+    import pandas as pd
     if req.method == "OPTIONS":
         return func.HttpResponse(status_code=204, headers={
             "Access-Control-Allow-Origin": "*",
@@ -989,7 +1112,7 @@ def set_active_model(req: func.HttpRequest) -> func.HttpResponse:
                 logging.error(f"Error updating model history status: {e}")
         
         return func.HttpResponse(
-            body=json.dumps({"message": f"Successfully rolled back to {version_id}"}),
+            body=safe_json_dumps({"message": f"Successfully rolled back to {version_id}"}),
             status_code=200,
             mimetype="application/json",
             headers={
@@ -1061,13 +1184,13 @@ def _load_hierarchy_with_fallback(sector_dir, version_id):
     
     return hierarchy
 
-@app.function_name(name="GetModelInfo")
 @app.route(
     route="GetModelInfo",
     methods=["GET", "OPTIONS"],
     auth_level=func.AuthLevel.ANONYMOUS
 )
-def get_model_info(req: func.HttpRequest) -> func.HttpResponse:
+def GetModelInfo(req: func.HttpRequest) -> func.HttpResponse:
+    import pandas as pd
     """
     Get detailed information about a model version including hierarchy, stats and metrics.
     
@@ -1249,7 +1372,7 @@ def get_model_info(req: func.HttpRequest) -> func.HttpResponse:
         }
         
         return func.HttpResponse(
-            body=json.dumps(response, ensure_ascii=False),
+            body=safe_json_dumps(response),
             status_code=200,
             mimetype="application/json",
             headers={
@@ -1264,13 +1387,13 @@ def get_model_info(req: func.HttpRequest) -> func.HttpResponse:
         return func.HttpResponse(f"Error: {str(e)}", status_code=500)
 
 
-@app.function_name(name="GetTrainingData")
 @app.route(
     route="GetTrainingData",
     methods=["GET", "OPTIONS"],
     auth_level=func.AuthLevel.ANONYMOUS
 )
-def get_training_data(req: func.HttpRequest) -> func.HttpResponse:
+def GetTrainingData(req: func.HttpRequest) -> func.HttpResponse:
+    import pandas as pd
     """
     Get paginated training data from dataset_master.csv.
     
@@ -1305,7 +1428,7 @@ def get_training_data(req: func.HttpRequest) -> func.HttpResponse:
         
         if not os.path.exists(master_file):
             return func.HttpResponse(
-                body=json.dumps({"data": [], "total": 0, "page": page, "page_size": page_size}),
+                body=safe_json_dumps({"data": [], "total": 0, "page": page, "page_size": page_size}),
                 status_code=200,
                 mimetype="application/json",
                 headers={"Access-Control-Allow-Origin": "*"}
@@ -1357,7 +1480,7 @@ def get_training_data(req: func.HttpRequest) -> func.HttpResponse:
         }
         
         return func.HttpResponse(
-            body=json.dumps(response, ensure_ascii=False, default=str),
+            body=safe_json_dumps(response),
             status_code=200,
             mimetype="application/json",
             headers={
@@ -1372,13 +1495,13 @@ def get_training_data(req: func.HttpRequest) -> func.HttpResponse:
         return func.HttpResponse(f"Error: {str(e)}", status_code=500)
 
 
-@app.function_name(name="DeleteTrainingData")
 @app.route(
     route="DeleteTrainingData",
     methods=["POST", "OPTIONS"],
     auth_level=func.AuthLevel.ANONYMOUS
 )
-def delete_training_data(req: func.HttpRequest) -> func.HttpResponse:
+def DeleteTrainingData(req: func.HttpRequest) -> func.HttpResponse:
+    import pandas as pd
     """
     Delete training data rows from dataset_master.csv.
     

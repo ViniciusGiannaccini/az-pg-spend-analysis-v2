@@ -6,8 +6,9 @@ interface DownloadCardProps {
 }
 
 export default function DownloadCard({ downloadUrl, downloadFilename }: DownloadCardProps) {
-    // Extract file info
-    const fileExtension = downloadFilename.split('.').pop()?.toUpperCase() || 'XLSX'
+    // Extract file info with safety
+    const safeFilename = downloadFilename || 'resultado.xlsx'
+    const fileExtension = safeFilename.split('.').pop()?.toUpperCase() || 'XLSX'
 
     return (
         <div className="flex gap-4 animate-fadeIn">
@@ -61,9 +62,9 @@ export default function DownloadCard({ downloadUrl, downloadFilename }: Download
 
                         {/* Download Button - Teal Gradient */}
                         <a
-                            href={downloadUrl}
-                            download={downloadFilename}
-                            className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#38bec9] to-[#14919b] hover:from-[#4dd0d9] hover:to-[#38bec9] text-white rounded-lg font-medium text-sm transition-all duration-200 shadow-md hover:shadow-lg shadow-[#38bec9]/20 group"
+                            href={downloadUrl || '#'}
+                            download={safeFilename}
+                            className={`mt-4 inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#38bec9] to-[#14919b] hover:from-[#4dd0d9] hover:to-[#38bec9] text-white rounded-lg font-medium text-sm transition-all duration-200 shadow-md hover:shadow-lg shadow-[#38bec9]/20 group ${!downloadUrl ? 'opacity-50 pointer-events-none' : ''}`}
                         >
                             <svg className="w-4 h-4 group-hover:translate-y-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />

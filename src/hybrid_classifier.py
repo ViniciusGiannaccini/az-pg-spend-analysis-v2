@@ -13,6 +13,7 @@ This module orchestrates the classification logic:
 
 import sys
 import os
+import logging
 from typing import Dict, List, Tuple, Optional
 
 # Add src to path for imports
@@ -20,6 +21,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from ml_classifier import predict_single, load_model
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from taxonomy_engine import match_n4_without_priority
+from llm_classifier import classify_items_with_llm
 
 
 def find_ambiguity_level(candidates: List[Dict]) -> Tuple[Optional[str], List[str]]:
@@ -107,7 +109,9 @@ def classify_hybrid(
     label_encoder=None,
     hierarchy=None,
     confidence_threshold_unique: float = 0.45,
-    confidence_threshold_ambiguous: float = 0.25
+    confidence_threshold_ambiguous: float = 0.25,
+    use_llm_fallback: bool = False,
+    client_context: str = ""
 ) -> ClassificationResult:
     """
     Classify an item using hybrid ML + dictionary approach with disambiguation.
@@ -139,28 +143,60 @@ def classify_hybrid(
     Returns:
         ClassificationResult object.
     """
-    # Load ML models if not provided
-    if any(x is None for x in [vectorizer, classifier, label_encoder, hierarchy]):
-        vectorizer, classifier, label_encoder, hierarchy = load_model(sector=sector)
+    # Decision 0: If sector is Padrão, GO LLM FIRST (High priority context)
+    if sector == "Padrão":
+        # Note: In Padrão mode, we prioritize the LLM and its knowledge + client context
+        llm_results = classify_items_with_llm([description], sector=sector, client_context=client_context, custom_hierarchy=hierarchy)
+        if llm_results:
+            llm_res = llm_results[0]
+            if llm_res.get("N1"):
+                 return ClassificationResult(
+                    status="Único",
+                    n4=llm_res.get("N4", ""),
+                    n3=llm_res.get("N3", ""),
+                    n2=llm_res.get("N2", ""),
+                    n1=llm_res.get("N1", ""),
+                    matched_terms=[],
+                    confidence=llm_res.get("confidence", 0.0),
+                    source="LLM (UNSPSC)",
+                    ambiguous_n4s=[]
+                )
+    # Load ML models if not provided (only if sector is not "Padrão" or if we want to try ML anyway)
+    # If standard, we might skip ML or use a generic one. For now, let's assume we try ML first if possible
+    # but if sector is Padrão we might not have a model.
+    if sector != "Padrão" and any(x is None for x in [vectorizer, classifier, label_encoder, hierarchy]):
+        try:
+            vectorizer, classifier, label_encoder, hierarchy = load_model(sector=sector)
+        except Exception:
+            logging.warning(f"Could not load ML model for sector '{sector}'. Proceeding without ML.")
+            vectorizer, classifier, label_encoder, hierarchy = None, None, None, None
     
-    # Get ML prediction
-    ml_result = predict_single(
-        description,
-        sector=sector,
-        vectorizer=vectorizer,
-        classifier=classifier,
-        label_encoder=label_encoder,
-        hierarchy=hierarchy,
-        top_k=3
-    )
+    # Get ML prediction if model is loaded
+    ml_confidence = 0.0
+    ml_n4 = ""
+    ml_n1 = ""
+    ml_n2 = ""
+    ml_n3 = ""
+    top_candidates = []
     
-    ml_confidence = ml_result['confidence']
-    ml_n4 = ml_result['n4_predicted']
-    ml_n1 = ml_result['N1']
-    ml_n2 = ml_result['N2']
-    ml_n3 = ml_result['N3']
-    top_candidates = ml_result['top_candidates'][:3]
-    
+    if classifier:
+        ml_result = predict_single(
+            description,
+            sector=sector,
+            vectorizer=vectorizer,
+            classifier=classifier,
+            label_encoder=label_encoder,
+            hierarchy=hierarchy,
+            top_k=3
+        )
+        
+        ml_confidence = ml_result['confidence']
+        ml_n4 = ml_result['n4_predicted']
+        ml_n1 = ml_result['N1']
+        ml_n2 = ml_result['N2']
+        ml_n3 = ml_result['N3']
+        top_candidates = ml_result['top_candidates'][:3]
+        
     # Decision 1: High confidence -> Único (ML)
     if ml_confidence >= confidence_threshold_unique:
         return ClassificationResult(
@@ -220,28 +256,47 @@ def classify_hybrid(
             top_candidates=top_candidates
         )
     
-    # Decision 3: Low confidence -> Try Dictionary fallback
-    taxonomy, status, matched, score = match_n4_without_priority(
-        desc_norm if desc_norm else description,
-        dict_patterns,
-        dict_terms,
-        dict_taxonomy
-    )
-    
-    # Dictionary matched
-    if taxonomy and status in ["Único", "Ambíguo"]:
-        return ClassificationResult(
-            status=status,
-            n4=taxonomy.get('N4', ''),
-            n3=taxonomy.get('N3', ''),
-            n2=taxonomy.get('N2', ''),
-            n1=taxonomy.get('N1', ''),
-            matched_terms=matched,
-            confidence=ml_confidence,
-            source="Dictionary",
-            ambiguous_n4s=[taxonomy.get('N4', '')] if status == "Ambíguo" else []
+    # Decision 3: Low confidence -> Try Dictionary fallback (only if provided)
+    if dict_patterns is not None and dict_terms is not None and dict_taxonomy is not None:
+        taxonomy, status, matched, score = match_n4_without_priority(
+            desc_norm if desc_norm else description,
+            dict_patterns,
+            dict_terms,
+            dict_taxonomy
         )
+        
+        # Dictionary matched
+        if taxonomy and status in ["Único", "Ambíguo"]:
+            return ClassificationResult(
+                status=status,
+                n4=taxonomy.get('N4', ''),
+                n3=taxonomy.get('N3', ''),
+                n2=taxonomy.get('N2', ''),
+                n1=taxonomy.get('N1', ''),
+                matched_terms=matched,
+                confidence=ml_confidence,
+                source="Dictionary",
+                ambiguous_n4s=[taxonomy.get('N4', '')] if status == "Ambíguo" else []
+            )
     
+    # Decision 4: Try LLM (fallback for non-Padrão sectors)
+    if use_llm_fallback:
+        llm_results = classify_items_with_llm([description], sector=sector, client_context=client_context, custom_hierarchy=hierarchy)
+        if llm_results:
+            llm_res = llm_results[0]
+            if llm_res.get("N1"):
+                 return ClassificationResult(
+                    status="Único", # LLM usually returns one answer
+                    n4=llm_res.get("N4", ""),
+                    n3=llm_res.get("N3", ""),
+                    n2=llm_res.get("N2", ""),
+                    n1=llm_res.get("N1", ""),
+                    matched_terms=[],
+                    confidence=llm_res.get("confidence", 0.0),
+                    source="LLM (UNSPSC)",
+                    ambiguous_n4s=[]
+                )
+
     # No match at all -> Não Classificado
     return ClassificationResult(
         status="Nenhum",

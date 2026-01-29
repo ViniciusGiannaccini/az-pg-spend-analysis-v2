@@ -318,11 +318,20 @@ ${userMsg}`
         }
     }
 
-    const sendUserMessage = async (overrideMessage?: string) => {
-        const msgToSend = overrideMessage || userMessage
-        if (!msgToSend.trim() || !sessionId) return
+    const sendUserMessage = async (overrideMessage?: string | any) => {
+        // Robust check: overrideMessage might be a MouseEvent if called from onClick={sendUserMessage}
+        let msgToSend: string = '';
+        if (typeof overrideMessage === 'string') {
+            msgToSend = overrideMessage;
+        } else if (typeof userMessage === 'string') {
+            msgToSend = userMessage;
+        }
 
-        if (!overrideMessage) setUserMessage('')
+        if (!msgToSend || !msgToSend.trim() || !sessionId) return;
+
+        // Reset input IF we used the state message
+        if (typeof overrideMessage !== 'string') setUserMessage('')
+
         setIsSending(true)
 
         // Add user message immediately
@@ -366,7 +375,21 @@ ${userMsg}`
         const hasValidSummary = activeSession.summary?.total_linhas > 0
         const hasValidAnalytics = activeSession.analytics?.pareto && activeSession.analytics.pareto.length > 0
 
-        if (!hasValidSummary || !hasValidAnalytics) return
+        console.log("[COPILOT] Checking summary trigger:", { hasValidSummary, hasValidAnalytics, analytics: activeSession.analytics });
+
+        if (!hasValidSummary) {
+            console.error("[COPILOT] Cannot generate summary: total_linhas is 0 or missing", activeSession.summary);
+            injectMessage('bot', "⚠️ Os resultados foram processados, mas os dados de sumário estão zerados ou incompletos na resposta do servidor.")
+            setIsCopilotLoading(false)
+            return
+        }
+
+        if (!hasValidAnalytics) {
+            console.error("[COPILOT] Cannot generate summary: analytics.pareto is missing or empty", activeSession.analytics);
+            injectMessage('bot', "⚠️ Os resultados foram processados, mas os dados analíticos (Pareto) estão ausentes.")
+            setIsCopilotLoading(false)
+            return
+        }
 
         setIsCopilotLoading(true)
 
@@ -415,15 +438,25 @@ ${JSON.stringify(contextData, null, 2)}
             await apiClient.sendMessageToCopilot(tempConversationId, tempToken, summaryPrompt)
 
             let attempts = 0
-            const maxAttempts = 15
-            let pollingComplete = false // Guard to prevent duplicate updates
+            const maxAttempts = 20 // Increased to 1 minute 40s
+            let pollingComplete = false
 
             const poll = async () => {
-                if (attempts >= maxAttempts || pollingComplete) {
-                    setIsCopilotLoading(false)
+                if (attempts >= maxAttempts) {
+                    if (!pollingComplete) {
+                        setIsCopilotLoading(false)
+                        updateMessages([{
+                            from: 'bot',
+                            text: "O Resumo Automático não pôde ser gerado no momento. Você pode fazer perguntas específicas sobre os dados abaixo!",
+                            timestamp: new Date()
+                        }])
+                    }
                     return
                 }
+
+                if (pollingComplete) return
                 attempts++
+                console.log(`[COPILOT] Polling summary attempt ${attempts}/${maxAttempts}...`);
 
                 try {
                     const activityData = await apiClient.getMessagesFromCopilot(tempConversationId, tempToken)
@@ -457,6 +490,11 @@ ${JSON.stringify(contextData, null, 2)}
         } catch (error) {
             console.error("Error generating summary:", error)
             setIsCopilotLoading(false)
+            updateMessages([{
+                from: 'bot',
+                text: "Desculpe, houve um erro técnico ao iniciar a conversa com o Copilot. Você ainda pode baixar o resultado acima!",
+                timestamp: new Date()
+            }])
         }
     }
 

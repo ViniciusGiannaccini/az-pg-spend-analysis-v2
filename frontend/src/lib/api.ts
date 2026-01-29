@@ -85,13 +85,15 @@ export const apiClient = {
         dictionaryContent: string,
         sector: string,
         originalFilename: string,
-        customHierarchy?: string  // Optional custom hierarchy base64
+        customHierarchy?: string, // Optional custom hierarchy base64
+        clientContext?: string    // Optional client context
     ): Promise<any> {
         const requestBody: any = {
             fileContent,
             dictionaryContent,
             sector,
-            originalFilename
+            originalFilename,
+            clientContext: clientContext || ""
         }
 
         // Only include customHierarchy if provided
@@ -100,7 +102,8 @@ export const apiClient = {
         }
 
         const response = await axios.post(`${API_BASE_URL}/ProcessTaxonomy`, requestBody, {
-            headers: getAuthHeaders()
+            headers: getAuthHeaders(),
+            timeout: 1800000 // 30 minutes for large files
         })
         return response.data
     },

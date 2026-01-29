@@ -73,10 +73,10 @@ function UploadStep({ sector, onFileSelect }: { sector: string; onFileSelect: (f
     return (
         <>
             <h2 className="text-lg font-semibold text-gray-800 mb-2 text-center">
-                Treinar Novo Modelo
+                Refinar Inteligência do Sistema
             </h2>
             <p className="text-sm text-gray-500 mb-2 text-center max-w-sm mx-auto">
-                Envie o arquivo "Final" classificado corretamente para o setor <strong>{sector}</strong>.
+                Suba o seu arquivo Excel com as correções manuais para o setor <strong>{sector}</strong> para que o sistema aprenda com elas.
             </p>
             <div className="text-xs text-gray-500 bg-[#38bec9]/10 border border-[#38bec9]/30 rounded-lg p-3 mb-6 max-w-md mx-auto">
                 <strong>Formato Obrigatório:</strong> O arquivo deve conter exatamente as colunas:
@@ -123,7 +123,7 @@ function PreviewStep({
                         <div>
                             <h3 className={`text-base font-bold leading-tight ${isFullyValid ? 'text-green-800' : 'text-red-800'
                                 }`}>
-                                {isFullyValid ? 'Pronto para Treino' : 'Atenção Necessária'}
+                                {isFullyValid ? 'Pronto para Refinar' : 'Atenção Necessária'}
                             </h3>
                             <p className="text-[10px] text-gray-500 uppercase tracking-wide font-medium">
                                 Qualidade: {validationStatus.score}/100
@@ -219,7 +219,7 @@ function TrainingStep() {
     return (
         <div className="mt-6 text-center">
             <div className="inline-block animate-spin rounded-full h-10 w-10 border-4 border-gray-200 border-t-[#14919b]"></div>
-            <p className="text-sm text-gray-600 mt-3 font-medium">Treinando modelo (isso pode levar alguns minutos)...</p>
+            <p className="text-sm text-gray-600 mt-3 font-medium">Refinando inteligência com base nas suas correções (quase pronto)...</p>
         </div>
     )
 }
@@ -240,7 +240,7 @@ function ResultStep({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
             </div>
-            <h3 className="text-xl font-bold text-gray-800 mb-2">Treinamento Concluído!</h3>
+            <h3 className="text-xl font-bold text-gray-800 mb-2">Refino Concluído!</h3>
             <p className="text-sm text-gray-600 mb-6">
                 O modelo para <strong>{sector}</strong> foi atualizado com sucesso.
             </p>
@@ -250,7 +250,7 @@ function ResultStep({
                     onClick={onTrainAnother}
                     className="w-full px-4 py-3 bg-gradient-to-r from-[#38bec9] to-[#14919b] hover:from-[#4dd0d9] hover:to-[#38bec9] text-white rounded-lg transition-all font-medium shadow-md hover:shadow-lg shadow-[#38bec9]/20"
                 >
-                    Treinar Outro Modelo
+                    Refinar Outro Setor
                 </button>
             </div>
         </div>

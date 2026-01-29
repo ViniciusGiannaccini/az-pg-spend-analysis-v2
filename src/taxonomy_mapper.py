@@ -34,11 +34,14 @@ def load_custom_hierarchy(base64_content: str) -> Dict[str, Dict]:
         except Exception as e:
             raise ValueError(f"Could not read file as Excel or CSV: {e}")
     
+    # Normalize column headers (handle casing and whitespace)
+    df.columns = [str(col).strip().upper() for col in df.columns]
+    
     # Validate required columns
     required_cols = ['N1', 'N2', 'N3', 'N4']
     missing_cols = [col for col in required_cols if col not in df.columns]
     if missing_cols:
-        raise ValueError(f"Missing required columns: {missing_cols}")
+        raise ValueError(f"Missing required columns: {missing_cols}. Please use 'N1', 'N2', 'N3', 'N4' as headers.")
     
     # Build hierarchy mapping
     hierarchy = {}
@@ -74,16 +77,31 @@ def apply_custom_hierarchy(
         hierarchy_dict: {"N1": ..., "N2": ..., "N3": ..., "N4": ...}
         matched_n4: The N4 that was matched (original from candidates)
     """
+    # First pass: Look for exact matches (case-insensitive) in top candidates
     for candidate in top_candidates:
         n4_predicted = candidate.get('N4', '')
         if not n4_predicted:
             continue
         
-        # Try to find in custom hierarchy (case-insensitive)
         n4_key = n4_predicted.lower().strip()
         if n4_key in custom_hierarchy:
             return custom_hierarchy[n4_key], n4_predicted
     
+    # Second pass: Fuzzy matching (only if ML provides a strong lead)
+    # We take the top ML candidate and find the most similar string in our custom hierarchy keys
+    if top_candidates:
+        try:
+            from difflib import get_close_matches
+            n4_ml = str(top_candidates[0].get('N4', '')).lower().strip()
+            if n4_ml:
+                # Find best string match (min score 0.6)
+                matches = get_close_matches(n4_ml, custom_hierarchy.keys(), n=1, cutoff=0.6)
+                if matches:
+                    matched_key = matches[0]
+                    return custom_hierarchy[matched_key], top_candidates[0]['N4']
+        except Exception:
+            pass # Fall back to None if fuzzy matching fails
+
     # No match found
     return None, None
 

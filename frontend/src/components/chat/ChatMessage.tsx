@@ -130,11 +130,9 @@ export default function ChatMessage({ message }: ChatMessageProps) {
             {/* Avatar */}
             {!isUser && (
                 <div className="w-10 h-10 rounded-xl bg-white shadow-md flex items-center justify-center flex-shrink-0 overflow-hidden border border-gray-100">
-                    <Image
+                    <img
                         src="/agent-icon.png"
                         alt="AI Agent"
-                        width={40}
-                        height={40}
                         className="w-full h-full object-cover"
                     />
                 </div>
@@ -166,7 +164,9 @@ export default function ChatMessage({ message }: ChatMessageProps) {
                     )}
                 </div>
                 <p className={`text-xs text-[#829ab1] mt-2 ${isUser ? 'text-right pr-1' : 'pl-1'}`}>
-                    {message.timestamp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                    {message.timestamp instanceof Date && !isNaN(message.timestamp.getTime())
+                        ? message.timestamp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                        : ''}
                 </p>
             </div>
         </div>

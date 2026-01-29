@@ -63,10 +63,14 @@ interface UseTaxonomySessionReturn {
     sectors: string[]
     /** True while sectors are being loaded from the dictionary */
     isLoadingSectors: boolean
+    /** Additional context about the client/project */
+    clientContext: string
 
     // Actions
     /** Updates the selected sector */
     setSector: (sector: string) => void
+    /** Updates the client context */
+    setClientContext: (context: string) => void
     /** Sets the active session by ID (null to deselect) */
     setActiveSessionId: (id: string | null) => void
     /** Clears active session to show the upload form */
@@ -104,6 +108,7 @@ export function useTaxonomySession(): UseTaxonomySessionReturn {
     const [sector, setSector] = useState('Varejo')
     const [sectors, setSectors] = useState<string[]>([])
     const [isLoadingSectors, setIsLoadingSectors] = useState(true)
+    const [clientContext, setClientContext] = useState('')
 
     const activeSession = sessions.find(s => s.sessionId === activeSessionId)
 
@@ -113,17 +118,23 @@ export function useTaxonomySession(): UseTaxonomySessionReturn {
             const storedSessions = await getAllSessions()
             if (storedSessions.length > 0) {
                 // Recreate blob URLs for download
-                const sessionsWithUrls = storedSessions.map(session => {
+                const sessionsWithUrls = await Promise.all(storedSessions.map(async (session) => {
                     if (session.fileContentBase64) {
-                        const blob = base64ToBlob(
+                        const blob = await base64ToBlob(
                             session.fileContentBase64,
                             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
                         )
                         return { ...session, downloadUrl: URL.createObjectURL(blob) }
                     }
                     return session
-                })
+                }))
                 setSessions(sessionsWithUrls)
+
+                // Auto-select latest session if none is active
+                if (sessionsWithUrls.length > 0 && !activeSessionId) {
+                    console.log("[DEBUG] Auto-selecting latest session:", sessionsWithUrls[0].sessionId);
+                    setActiveSessionId(sessionsWithUrls[0].sessionId)
+                }
             }
         }
         loadSessions()
@@ -158,17 +169,22 @@ export function useTaxonomySession(): UseTaxonomySessionReturn {
                 const uniqueSectors = Array.from(new Set(loadedSectors)) as string[]
 
                 if (uniqueSectors.length > 0) {
+                    // Add "Padrão (UNSPSC)" if not present
+                    if (!uniqueSectors.includes('Padrão')) {
+                        uniqueSectors.unshift('Padrão');
+                    }
+
                     setSectors(uniqueSectors)
                     if (!uniqueSectors.includes(sector)) {
                         setSector(uniqueSectors[0])
                     }
                 } else {
-                    setSectors(['Varejo', 'Educacional'])
+                    setSectors(['Padrão', 'Varejo', 'Educacional'])
                 }
 
             } catch (error) {
                 console.error("Error loading sectors:", error)
-                setSectors(['Varejo', 'Educacional'])
+                setSectors(['Padrão', 'Varejo', 'Educacional'])
             } finally {
                 setIsLoadingSectors(false)
             }
@@ -181,74 +197,98 @@ export function useTaxonomySession(): UseTaxonomySessionReturn {
         setActiveSessionId(null)
     }, [])
 
+    // Helper function to convert File to Base64 (Promise-based)
+    const readFileAsBase64 = (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const base64String = (reader.result as string).split(',')[1];
+                resolve(base64String);
+            };
+            reader.onerror = (error) => reject(error);
+            reader.readAsDataURL(file);
+        });
+    };
+
     // Helper function to convert base64 to Blob
-    const base64ToBlob = (base64: string, contentType: string): Blob => {
-        const byteCharacters = atob(base64)
-        const byteNumbers = new Array(byteCharacters.length)
-        for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i)
+    const base64ToBlob = async (base64: string, contentType: string): Promise<Blob> => {
+        try {
+            if (!base64) return new Blob([], { type: contentType });
+            // Remove whitespace/newlines that might come from JSON or formatting
+            const cleanBase64 = base64.replace(/\s/g, '').split(',').pop() || '';
+            if (!cleanBase64) return new Blob([], { type: contentType });
+
+            const dataUrl = `data:${contentType};base64,${cleanBase64}`;
+            const res = await fetch(dataUrl);
+            if (!res.ok) throw new Error("Fetch to DataURL failed");
+            return await res.blob();
+        } catch (error) {
+            console.error("Base64 to Blob failed:", error);
+            return new Blob([], { type: contentType });
         }
-        const byteArray = new Uint8Array(byteNumbers)
-        return new Blob([byteArray], { type: contentType })
     }
 
     const handleFileSelect = async (file: File, fileContent: string, hierarchyContent?: string) => {
         setIsProcessing(true)
 
         try {
-            const dictionaryResponse = await fetch('/Spend_Taxonomy.xlsx')
-            const dictionaryBlob = await dictionaryResponse.blob()
+            let dictionaryBase64: string | undefined = undefined;
 
-            const reader = new FileReader()
-            reader.onload = async (e) => {
-                const dictionaryBase64 = (e.target?.result as string).split(',')[1]
-
-                // Process file via Azure Function (include custom hierarchy if provided)
-                const result = await apiClient.processTaxonomy(
-                    fileContent,
-                    dictionaryBase64,
-                    sector,
-                    file.name,
-                    hierarchyContent
-                )
-
-                // Generate XLSX file for download
-                const xlsxBlob = base64ToBlob(result.fileContent, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-                const downloadUrl = URL.createObjectURL(xlsxBlob)
-
-                // Create new session object
-                const newSession: TaxonomySession = {
-                    filename: file.name,
-                    sector: sector,
-                    sessionId: result.sessionId,
-                    summary: result.summary,
-                    analytics: result.analytics,
-                    items: result.items,
-                    downloadUrl: downloadUrl,
-                    downloadFilename: result.filename,
-                    timestamp: new Date().toISOString()
-                }
-
-                // Add to sessions array and set as active
-                setSessions(prev => [newSession, ...prev])
-                setActiveSessionId(result.sessionId)
-
-                // Persist to IndexedDB (include fileContent for later re-download)
-                const sessionToSave = {
-                    ...newSession,
-                    downloadUrl: undefined, // Don't persist blob URL
-                    fileContentBase64: result.fileContent
-                }
-                saveSession(sessionToSave)
-
-                setIsProcessing(false)
+            // EXCLUSIVE MODE LOGIC:
+            // If user provided a custom hierarchy, we SKIP fetching the default dictionary
+            if (!hierarchyContent) {
+                console.log("[DEBUG] No hierarchy provided, loading default dictionary...");
+                const dictionaryResponse = await fetch('/Spend_Taxonomy.xlsx');
+                if (!dictionaryResponse.ok) throw new Error("Falha ao carregar Spend_Taxonomy.xlsx");
+                const dictionaryBlob = await dictionaryResponse.blob();
+                dictionaryBase64 = await readFileAsBase64(dictionaryBlob as unknown as File);
+            } else {
+                console.log("[DEBUG] Custom Hierarchy provided. Activating Exclusive Mode.");
             }
-            reader.readAsDataURL(dictionaryBlob)
 
-        } catch (error) {
-            console.error('Error processing file:', error)
+            // Process file via Azure Function
+            const result = await apiClient.processTaxonomy(
+                fileContent,
+                dictionaryBase64 || "",
+                sector,
+                file.name,
+                hierarchyContent,
+                clientContext
+            )
+
+            if (!result || !result.sessionId) {
+                throw new Error("Resposta da API inválida ou SessionId ausente.");
+            }
+
+            const xlsxBlob = await base64ToBlob(result.fileContent, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            const downloadUrl = URL.createObjectURL(xlsxBlob)
+
+            const newSession: TaxonomySession = {
+                filename: file.name,
+                sector: sector,
+                sessionId: result.sessionId,
+                summary: result.summary,
+                analytics: result.analytics,
+                items: result.items,
+                downloadUrl: downloadUrl,
+                downloadFilename: result.filenameDetail || result.filename || file.name,
+                timestamp: new Date().toISOString()
+            }
+
+            setSessions(prev => [newSession, ...prev])
+            setActiveSessionId(result.sessionId)
+
+            const sessionToSave = {
+                ...newSession,
+                downloadUrl: undefined,
+                fileContentBase64: result.fileContent
+            }
+            await saveSession(sessionToSave)
+        } catch (error: any) {
+            console.error("Erro no processamento da taxonomia:", error);
+            alert(`Erro ao processar arquivo: ${error.message || 'Erro desconhecido'}`);
+        } finally {
             setIsProcessing(false)
-            alert('Erro ao processar arquivo. Tente novamente.')
         }
     }
 
@@ -295,7 +335,9 @@ export function useTaxonomySession(): UseTaxonomySessionReturn {
         sector,
         sectors,
         isLoadingSectors,
+        clientContext,
         setSector,
+        setClientContext,
         setActiveSessionId,
         handleNewUpload,
         handleFileSelect,
@@ -304,13 +346,15 @@ export function useTaxonomySession(): UseTaxonomySessionReturn {
     }
 }
 
-// Export base64ToBlob for use in other components
-export const base64ToBlob = (base64: string, contentType: string): Blob => {
-    const byteCharacters = atob(base64)
-    const byteNumbers = new Array(byteCharacters.length)
-    for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i)
+// Exported helper (legacy, preferred to use the async one inside hook or similar)
+export const base64ToBlob = async (base64: string, contentType: string): Promise<Blob> => {
+    try {
+        const cleanBase64 = base64.replace(/\s/g, '').split(',').pop() || '';
+        const dataUrl = `data:${contentType};base64,${cleanBase64}`;
+        const res = await fetch(dataUrl);
+        return await res.blob();
+    } catch (e) {
+        console.error("Exported base64ToBlob failed:", e);
+        return new Blob([], { type: contentType });
     }
-    const byteArray = new Uint8Array(byteNumbers)
-    return new Blob([byteArray], { type: contentType })
 }

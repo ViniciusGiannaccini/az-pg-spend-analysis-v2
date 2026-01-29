@@ -94,23 +94,23 @@ def load_model(sector: str = "varejo", models_dir: str = "models") -> Tuple:
     # Load vectorizer
     vectorizer_path = os.path.join(sector_model_dir, "tfidf_vectorizer.pkl")
     _MODEL_CACHE[sector]['vectorizer'] = joblib.load(vectorizer_path)
-    print(f"  ✓ Loaded vectorizer")
+    print(f"  [SUCCESS] Loaded vectorizer")
     
     # Load classifier
     classifier_path = os.path.join(sector_model_dir, "classifier.pkl")
     _MODEL_CACHE[sector]['classifier'] = joblib.load(classifier_path)
-    print(f"  ✓ Loaded classifier")
+    print(f"  [SUCCESS] Loaded classifier")
     
     # Load label encoder
     encoder_path = os.path.join(sector_model_dir, "label_encoder.pkl")
     _MODEL_CACHE[sector]['label_encoder'] = joblib.load(encoder_path)
-    print(f"  ✓ Loaded label encoder ({len(_MODEL_CACHE[sector]['label_encoder'].classes_)} classes)")
+    print(f"  [SUCCESS] Loaded label encoder ({len(_MODEL_CACHE[sector]['label_encoder'].classes_)} classes)")
     
     # Load hierarchy mapping
     hierarchy_path = os.path.join(sector_model_dir, "n4_hierarchy.json")
     with open(hierarchy_path, 'r', encoding='utf-8') as f:
         _MODEL_CACHE[sector]['hierarchy'] = json.load(f)
-    print(f"  ✓ Loaded hierarchy mapping")
+    print(f"  [SUCCESS] Loaded hierarchy mapping")
     
     print(f"ML model for sector '{sector}' loaded successfully!")
     
