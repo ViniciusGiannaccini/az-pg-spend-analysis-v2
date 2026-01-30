@@ -19,15 +19,11 @@
     "supportCredentials": false
   },
   "logging": {
-    "applicationInsights": {
-      "samplingSettings": {
-        "isEnabled": true,
-        "maxTelemetryItemsPerSecond": 20
-      }
-    },
     "logLevel": {
       "default": "Information",
-      "Function": "Information"
+      "Host.Results": "Error",
+      "Function": "Information",
+      "Host.Aggregator": "Trace"
     }
   }
 }

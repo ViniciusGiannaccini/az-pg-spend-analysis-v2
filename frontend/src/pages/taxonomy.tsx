@@ -215,13 +215,13 @@ export default function TaxonomyPage() {
                                         {activeTab === 'classify' && (
                                             <div className="mb-8 flex-shrink-0 animate-fadeIn">
                                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Contexto Adicional (Ex: "Dengo - Chocolate", "Eneva - Energia")
+                                                    Contexto do Cliente e Regras de Negócio (Opcional)
                                                 </label>
                                                 <input
                                                     type="text"
                                                     value={clientContext}
                                                     onChange={(e) => setClientContext(e.target.value)}
-                                                    placeholder="Digite o contexto do cliente ou projeto para guiar a IA..."
+                                                    placeholder='Ex: "Eneva - Energia. Regra: Tubo deve ser Metalúrgico, exceto se PVC."'
                                                     className="w-full border border-gray-200 bg-white rounded-xl px-4 py-3 text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all shadow-sm placeholder:text-gray-400"
                                                     disabled={effectiveProcessing}
                                                 />

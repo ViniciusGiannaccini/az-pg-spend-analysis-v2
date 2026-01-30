@@ -210,9 +210,9 @@ def ProcessTaxonomy(req: func.HttpRequest) -> func.HttpResponse:
     from src.taxonomy_mapper import load_custom_hierarchy, apply_custom_hierarchy
     from src.taxonomy_engine import COL_DESC_CANDIDATES_DEFAULT
     USE_ML_CLASSIFIER = os.getenv("USE_ML_CLASSIFIER", "false").lower() == "true"
-    AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")
+    GROK_API_KEY = os.getenv("GROK_API_KEY")
     # Enable LLM if key is present and not the placeholder
-    USE_LLM = bool(AZURE_OPENAI_KEY and "SUA-CHAVE" not in AZURE_OPENAI_KEY)
+    USE_LLM = bool(GROK_API_KEY and "SUA-CHAVE" not in GROK_API_KEY)
     """
     Process an uploaded Excel file and perform taxonomy classification based on a provided dictionary.
 

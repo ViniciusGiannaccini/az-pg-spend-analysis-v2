@@ -73,10 +73,10 @@ function UploadStep({ sector, onFileSelect }: { sector: string; onFileSelect: (f
     return (
         <>
             <h2 className="text-lg font-semibold text-gray-800 mb-2 text-center">
-                Refinar Inteligência do Sistema
+                Consolidar Conhecimento do Consultor
             </h2>
             <p className="text-sm text-gray-500 mb-2 text-center max-w-sm mx-auto">
-                Suba o seu arquivo Excel com as correções manuais para o setor <strong>{sector}</strong> para que o sistema aprenda com elas.
+                Envie o arquivo final revisado/corrigido. O sistema usará estas correções para <strong>aprender suas regras de ouro</strong> e não cometer os mesmos erros novamente.
             </p>
             <div className="text-xs text-gray-500 bg-[#38bec9]/10 border border-[#38bec9]/30 rounded-lg p-3 mb-6 max-w-md mx-auto">
                 <strong>Formato Obrigatório:</strong> O arquivo deve conter exatamente as colunas:
