@@ -817,7 +817,54 @@ def TrainModel(req: func.HttpRequest) -> func.HttpResponse:
     
     if not file_content_b64 or not sector:
         return func.HttpResponse("Missing fileContent or sector", status_code=400)
+
+    # Handle 'Padrão' Sector (RAG Memory Ingestion)
+    if sector == "Padrão" or sector == "Padrao":
+        logging.info("Sector is 'Padrão'. Initiating Memory Ingestion (RAG)...")
         
+        try:
+            import base64
+            import tempfile
+            import uuid
+            import os
+            import json
+            from src.memory_engine import MemoryEngine
+
+            # Decode Base64
+            file_data = base64.b64decode(file_content_b64)
+            
+            temp_path = os.path.join(tempfile.gettempdir(), f"train_memory_{uuid.uuid4()}.xlsx")
+            with open(temp_path, "wb") as f:
+                f.write(file_data)
+            
+            # Call Memory Engine
+            engine = MemoryEngine()
+            result = engine.ingest(temp_path)
+            
+            # Cleanup
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+                
+            if result['success']:
+                return func.HttpResponse(
+                    json.dumps({
+                        "message": result['message'],
+                        "accuracy": 1.0, # Dummy metrics for frontend compatibility
+                        "f1_score": 1.0,
+                        "confusion_matrix": "N/A - Regras Aprendidas",
+                        "classification_report": "Memória Atualizada"
+                    }),
+                    mimetype="application/json",
+                    status_code=200
+                )
+            else:
+                return func.HttpResponse(f"Erro na ingestão de memória: {result['message']}", status_code=500)
+                
+        except Exception as e:
+            logging.error(f"Error in memory ingestion: {e}")
+            return func.HttpResponse(f"Erro interno na memória: {str(e)}", status_code=500)
+
+    # Standard ML Training logic (Original)
     sector = sector.strip().capitalize()
     
     # Decode file
@@ -1628,3 +1675,86 @@ def DeleteTrainingData(req: func.HttpRequest) -> func.HttpResponse:
     except Exception as e:
         logging.error(f"Error deleting training data: {e}")
         return func.HttpResponse(f"Error: {str(e)}", status_code=500)
+
+@app.route(route="SearchMemory", auth_level=func.AuthLevel.ANONYMOUS, methods=["GET", "OPTIONS"])
+def SearchMemory(req: func.HttpRequest) -> func.HttpResponse:
+    logging.info('SearchMemory HTTP trigger function processed a request.')
+    
+    if req.method == "OPTIONS":
+        return func.HttpResponse(
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type"
+            }
+        )
+
+    query = req.params.get('query', '')
+    
+    try:
+        from src.memory_engine import MemoryEngine
+        engine = MemoryEngine()
+        results = engine.search(query)
+        
+        return func.HttpResponse(
+            json.dumps(results),
+            mimetype="application/json",
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type"
+            }
+        )
+    except Exception as e:
+        logging.error(f"Error searching memory: {e}")
+        return func.HttpResponse(str(e), status_code=500)
+
+@app.route(route="DeleteMemoryRule", auth_level=func.AuthLevel.ANONYMOUS, methods=["DELETE", "GET", "OPTIONS"])
+def DeleteMemoryRule(req: func.HttpRequest) -> func.HttpResponse:
+    logging.info('DeleteMemoryRule HTTP trigger function processed a request.')
+    
+    if req.method == "OPTIONS":
+        return func.HttpResponse(
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "DELETE, GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type"
+            }
+        )
+
+    rule_id = req.params.get('id')
+    if not rule_id:
+        # Check body just in case
+        try:
+            body = req.get_json()
+            rule_id = body.get('id')
+        except:
+            pass
+            
+    if not rule_id:
+        return func.HttpResponse("Missing rule ID", status_code=400)
+    
+    try:
+        from src.memory_engine import MemoryEngine
+        engine = MemoryEngine()
+        success = engine.delete_rule(rule_id)
+        
+        if success:
+            return func.HttpResponse(
+                json.dumps({"success": True}),
+                mimetype="application/json",
+                status_code=200,
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "DELETE, GET, OPTIONS",
+                    "Access-Control-Allow-Headers": "Content-Type"
+                }
+            )
+        else:
+            return func.HttpResponse("Rule not found", status_code=404)
+    except Exception as e:
+        logging.error(f"Error deleting memory rule: {e}")
+        return func.HttpResponse(str(e), status_code=500)

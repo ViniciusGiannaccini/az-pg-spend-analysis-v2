@@ -242,7 +242,7 @@ function ResultStep({
             </div>
             <h3 className="text-xl font-bold text-gray-800 mb-2">Refino Concluído!</h3>
             <p className="text-sm text-gray-600 mb-6">
-                O modelo para <strong>{sector}</strong> foi atualizado com sucesso.
+                {trainingResult?.message || `O modelo para ${sector} foi atualizado com sucesso.`}
             </p>
 
             <div className="flex flex-col gap-3">
