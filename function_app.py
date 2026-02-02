@@ -855,14 +855,35 @@ def TrainModel(req: func.HttpRequest) -> func.HttpResponse:
                         "classification_report": "Memória Atualizada"
                     }),
                     mimetype="application/json",
-                    status_code=200
+                    status_code=200,
+                    headers={
+                        "Access-Control-Allow-Origin": "*",
+                        "Access-Control-Allow-Methods": "POST, OPTIONS",
+                        "Access-Control-Allow-Headers": "Content-Type"
+                    }
                 )
             else:
-                return func.HttpResponse(f"Erro na ingestão de memória: {result['message']}", status_code=500)
+                return func.HttpResponse(
+                    f"Erro na ingestão de memória: {result['message']}", 
+                    status_code=500,
+                    headers={
+                        "Access-Control-Allow-Origin": "*",
+                        "Access-Control-Allow-Methods": "POST, OPTIONS",
+                        "Access-Control-Allow-Headers": "Content-Type"
+                    }
+                )
                 
         except Exception as e:
             logging.error(f"Error in memory ingestion: {e}")
-            return func.HttpResponse(f"Erro interno na memória: {str(e)}", status_code=500)
+            return func.HttpResponse(
+                f"Erro interno na memória: {str(e)}", 
+                status_code=500,
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "POST, OPTIONS",
+                    "Access-Control-Allow-Headers": "Content-Type"
+                }
+            )
 
     # Standard ML Training logic (Original)
     sector = sector.strip().capitalize()
