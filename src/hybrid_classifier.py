@@ -300,10 +300,10 @@ def classify_hybrid(
     # No match at all -> Não Classificado
     return ClassificationResult(
         status="Nenhum",
-        n4="",
-        n3="",
-        n2="",
-        n1="",
+        n4="Não Identificado",
+        n3="Não Identificado",
+        n2="Não Identificado",
+        n1="Não Identificado",
         matched_terms=[],
         confidence=ml_confidence,
         source="None"

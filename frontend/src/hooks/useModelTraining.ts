@@ -57,7 +57,7 @@ interface UseModelTrainingReturn {
 
     // Actions
     /** Handles file selection and triggers validation */
-    handleTrainingFileSelect: (file: File, fileContent: string) => void
+    handleTrainingFileSelect: (file: File, fileContent: string, sector: string) => void;
     /** Confirms training and sends request to backend */
     confirmTraining: (sector: string) => Promise<void>
     /** Cancels training and returns to upload step */
@@ -109,7 +109,7 @@ export function useModelTraining(): UseModelTrainingReturn {
         return header
     }
 
-    const validateTrainingData = (data: any[]) => {
+    const validateTrainingData = (data: any[], sector: string) => {
         const checks: ValidationCheck[] = []
         let validRows = 0
         let score = 100
@@ -186,10 +186,21 @@ export function useModelTraining(): UseModelTrainingReturn {
                 checks.push({ label: "Completude dos Dados", status: 'ok', message: "Todas as linhas estão completas." })
             }
 
-            if (validRows < 10) {
-                checks.push({ label: "Volume de Dados", status: 'error', message: `Poucos dados válidos (${validRows}). Mínimo de 10 exemplos necessários.` })
+            const isPadrao = sector === 'Padrão' || sector === 'Padrao'
+            const minRows = isPadrao ? 1 : 10
+
+            if (validRows < minRows) {
+                checks.push({
+                    label: "Volume de Dados",
+                    status: 'error',
+                    message: `Poucos dados válidos (${validRows}). Mínimo de ${minRows} exemplos necessários.`
+                })
             } else {
-                checks.push({ label: "Volume de Dados", status: 'ok', message: `${validRows} exemplos válidos para treino.` })
+                checks.push({
+                    label: "Volume de Dados",
+                    status: 'ok',
+                    message: `${validRows} exemplos válidos para ${isPadrao ? 'memória' : 'treino'}.`
+                })
             }
         }
 
@@ -202,7 +213,7 @@ export function useModelTraining(): UseModelTrainingReturn {
         })
     }
 
-    const handleTrainingFileSelect = async (file: File, fileContent: string) => {
+    const handleTrainingFileSelect = async (file: File, fileContent: string, sector: string) => {
         setTrainingFile({ file, content: fileContent })
         setTrainingStep('preview')
 
@@ -217,7 +228,7 @@ export function useModelTraining(): UseModelTrainingReturn {
             const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
             const jsonData = XLSX.utils.sheet_to_json(firstSheet)
 
-            validateTrainingData(jsonData)
+            validateTrainingData(jsonData, sector)
             setPreviewData(jsonData.slice(0, 10))
 
         } catch (error) {

@@ -59,3 +59,4 @@ coverage/
 
 # ==== CACHE FILES ====
 /models/cache
+.python_packages

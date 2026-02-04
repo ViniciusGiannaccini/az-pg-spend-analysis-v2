@@ -496,31 +496,41 @@ def ProcessTaxonomy(req: func.HttpRequest) -> func.HttpResponse:
                 from src.llm_classifier import classify_items_with_llm
                 from src.hybrid_classifier import ClassificationResult
                 
-                descriptions = df_items["_desc_original"].tolist()
-                llm_results = classify_items_with_llm(
-                    descriptions, 
+                # Deduplication logic: Only send unique descriptions to LLM
+                all_descriptions = df_items["_desc_original"].tolist()
+                unique_descriptions = list(dict.fromkeys(all_descriptions)) # Preserves order
+                
+                logging.info(f"Deduplication: {len(unique_descriptions)} unique items found out of {total_items} total.")
+                
+                llm_unique_results = classify_items_with_llm(
+                    unique_descriptions, 
                     sector=sector, 
                     client_context=client_context, 
                     custom_hierarchy=hierarchy or custom_hierarchy
                 )
                 
-                # Convert LLM dicts to the format expected by the frontend
-                for res in llm_results:
-                    # Map LLM result to match ClassificationResult/to_dict structure
+                # Map unique results back to original list
+                # Create a map of {description: formatted_result}
+                desc_to_res = {}
+                for i, res in enumerate(llm_unique_results):
                     formatted = {
-                        "N1": res.get("N1", ""),
-                        "N2": res.get("N2", ""),
-                        "N3": res.get("N3", ""),
-                        "N4": res.get("N4", ""),
-                        "status": "Único" if res.get("N1") else "Nenhum",
+                        "N1": res.get("N1", "Não Identificado"),
+                        "N2": res.get("N2", "Não Identificado"),
+                        "N3": res.get("N3", "Não Identificado"),
+                        "N4": res.get("N4", "Não Identificado"),
+                        "status": "Único" if res.get("N1") and res.get("N1") != "Não Identificado" else "Nenhum",
                         "matched_terms": [],
                         "ml_confidence": res.get("confidence", 0.0),
-                        "classification_source": "LLM (UNSPSC Batch)",
+                        "classification_source": "LLM (UNSPSC Batch Optimized)",
                         "ambiguous_options": []
                     }
-                    results.append(formatted)
+                    desc_to_res[unique_descriptions[i]] = formatted
+                
+                # Fill results in the original order
+                for desc in all_descriptions:
+                    results.append(desc_to_res[desc])
                     
-                logging.info(f"Batch LLM classification completed for {total_items} items.")
+                logging.info(f"Batch LLM classification (optimized) completed for {total_items} items.")
             else:
                 # Standard Loop for Retail/Dictionary-First modes (already fast)
                 # First pass: Dictionary + ML ONLY (Local)

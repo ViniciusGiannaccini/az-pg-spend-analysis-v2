@@ -241,7 +241,7 @@ export default function TaxonomyPage() {
                                                     previewData={previewData}
                                                     validationStatus={validationStatus}
                                                     trainingResult={trainingResult}
-                                                    onFileSelect={handleTrainingFileSelect}
+                                                    onFileSelect={(file, content) => handleTrainingFileSelect(file, content, sector)}
                                                     onConfirmTraining={() => confirmTraining(sector)}
                                                     onCancelTraining={cancelTraining}
                                                 />

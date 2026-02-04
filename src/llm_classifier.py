@@ -62,14 +62,14 @@ def classify_items_with_llm(
     results = [None] * len(descriptions)
     
     # Process in larger batches (50 items) and use parallel threads
-    chunk_size = 50
+    chunk_size = 100
     chunks = []
     for i in range(0, len(descriptions), chunk_size):
         chunks.append((i, descriptions[i:i + chunk_size]))
     
     logging.info(f"Starting parallel LLM classification with {len(chunks)} chunks...")
     
-    with ThreadPoolExecutor(max_workers=10) as executor:
+    with ThreadPoolExecutor(max_workers=8) as executor:
         future_to_chunk = {
             executor.submit(_call_openai_api, chunk_items, config, sector, client_context, custom_hierarchy): chunk_start 
             for chunk_start, chunk_items in chunks
@@ -92,11 +92,11 @@ def classify_items_with_llm(
                     if idx < len(results):
                         results[idx] = _create_manual_fallback("Erro no processamento paralelo")
         
-    return [r if r is not None else _create_manual_fallback("Falha no mapeamento") for r in results]
+    return [r if r is not None else _create_manual_fallback("Falha no mapeamento", "Falha Crítica no Processamento") for r in results]
 
 def _create_empty_result():
     return {
-        "N1": "", "N2": "", "N3": "", "N4": "",
+        "N1": "Não Identificado", "N2": "Não Identificado", "N3": "Não Identificado", "N4": "Não Identificado",
         "LLM_Explanation": "LLM não configurado",
         "confidence": 0.0
     }
@@ -162,21 +162,37 @@ def _call_openai_api(
     if not config["api_key"] or len(config["api_key"]) < 10:
         logging.warning("CRITICAL: Grok API Key missing or too short!")
 
+    import time
+    max_retries = 2
+    for attempt in range(max_retries + 1):
+        try:
+            logging.info(f"Sending request to Grok with input size {len(items)} (Attempt {attempt + 1})")
+            response = requests.post(
+                endpoint,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {config['api_key']}"
+                },
+                json=payload,
+                timeout=90 # Increased timeout
+            )
+            
+            if response.status_code == 200:
+                break
+            
+            logging.error(f"Grok API Error {response.status_code} (Attempt {attempt + 1}): {response.text}")
+            if attempt < max_retries:
+                time.sleep(2 ** attempt) # Exponential backoff
+        except Exception as e:
+            logging.error(f"Exception calling Azure OpenAI (Attempt {attempt + 1}): {e}")
+            if attempt < max_retries:
+                time.sleep(2 ** attempt)
+            else:
+                return [_create_manual_fallback(item) for item in items]
+
     try:
-        logging.info(f"Sending request to Grok with input size {len(items)}")
-        response = requests.post(
-            endpoint,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {config['api_key']}"
-            },
-            json=payload,
-            timeout=60
-        )
-        
         if response.status_code != 200:
-            logging.error(f"Grok API Error {response.status_code}: {response.text}")
-            return [_create_manual_fallback(item) for item in items]
+            return [_create_manual_fallback(item, f"Erro {response.status_code} após retentativas") for item in items]
             
         data = response.json()
         content = data['choices'][0]['message']['content']
@@ -265,7 +281,7 @@ def _call_openai_api(
 
 def _create_manual_fallback(item_text, reason="Erro na API"):
     return {
-        "N1": "", "N2": "", "N3": "", "N4": "",
+        "N1": "Não Identificado", "N2": "Não Identificado", "N3": "Não Identificado", "N4": "Não Identificado",
         "LLM_Explanation": reason,
         "confidence": 0.0
     }
