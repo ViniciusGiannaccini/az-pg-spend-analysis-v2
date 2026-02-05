@@ -29,8 +29,25 @@ def get_models_dir() -> str:
         azure_models = "/home/models"
         try:
             os.makedirs(azure_models, exist_ok=True)
-        except Exception:
-            pass  # Directory creation will be retried when needed
+            
+            # BOOTSTRAP: Initialize models from read-only package to writable /home
+            # Package location behavior: /home/site/wwwroot/models
+            package_models = os.path.join(os.getcwd(), "models") 
+            # Note: os.getcwd() usually returns /home/site/wwwroot in Azure Functions
+            
+            # Copy only if destination is empty (first run) or if we want to force update (logic can be refined)
+            # For now: Initialize if empty to ensure writable access
+            if os.path.exists(package_models) and not os.listdir(azure_models):
+                logging.info(f"[BOOTSTRAP] Initializing models from {package_models} to {azure_models}...")
+                shutil.copytree(package_models, azure_models, dirs_exist_ok=True)
+                logging.info("[BOOTSTRAP] Models copied successfully.")
+            elif not os.path.exists(package_models):
+                 logging.warning(f"[BOOTSTRAP] Source models not found at {package_models}. Starting empty.")
+
+        except Exception as e:
+            logging.error(f"[BOOTSTRAP] Error initializing models directory: {e}")
+            # Fallback to local if copy fails (though likely won't work well in Azure if read-only)
+            pass  
         return azure_models
     # Local development
     return "models"
