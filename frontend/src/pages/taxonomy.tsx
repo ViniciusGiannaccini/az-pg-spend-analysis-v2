@@ -221,7 +221,7 @@ export default function TaxonomyPage() {
                                                     type="text"
                                                     value={clientContext}
                                                     onChange={(e) => setClientContext(e.target.value)}
-                                                    placeholder='Ex: "Eneva - Energia. Regra: Tubo deve ser Metalúrgico, exceto se PVC."'
+                                                    placeholder='Escreva aqui o prompt detalhado para categorização...'
                                                     className="w-full border border-gray-200 bg-white rounded-xl px-4 py-3 text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all shadow-sm placeholder:text-gray-400"
                                                     disabled={effectiveProcessing}
                                                 />
