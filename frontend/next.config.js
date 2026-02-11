@@ -8,6 +8,9 @@ const nextConfig = {
     typescript: {
         ignoreBuildErrors: true,
     },
+    images: {
+        unoptimized: true,
+    },
     // Disable webpack caching to avoid RangeError: Array buffer allocation failed on machines with low RAM
     webpack: (config, { dev }) => {
         if (dev) {
