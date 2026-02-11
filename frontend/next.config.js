@@ -1,12 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-    output: 'export',
     reactStrictMode: true,
     eslint: {
         ignoreDuringBuilds: true,
     },
     typescript: {
         ignoreBuildErrors: true,
+    },
+    images: {
+        unoptimized: true,
     },
     // Disable webpack caching to avoid RangeError: Array buffer allocation failed on machines with low RAM
     webpack: (config, { dev }) => {

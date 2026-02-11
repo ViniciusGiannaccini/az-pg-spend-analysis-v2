@@ -1,0 +1,25 @@
+{
+    "navigationFallback": {
+        "rewrite": "/index.html"
+    },
+    "routes": [
+        {
+            "route": "/api/*",
+            "allowedRoles": [
+                "authenticated"
+            ]
+        }
+    ],
+    "responseOverrides": {
+        "404": {
+            "rewrite": "/404",
+            "statusCode": 404
+        }
+    },
+    "globalHeaders": {
+        "content-security-policy": "default-src https: 'unsafe-inline' 'unsafe-eval'; img-src https: data:;"
+    },
+    "mimeTypes": {
+        ".json": "application/json"
+    }
+}
