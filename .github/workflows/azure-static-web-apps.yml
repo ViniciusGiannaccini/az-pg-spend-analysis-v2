@@ -35,6 +35,8 @@ jobs:
           # api_location removed - Azure Static Web Apps doesn't support separate API with standalone Next.js apps
           output_location: "out" # Built app content directory - optional
           app_build_command: "npm run build" # Override Azure's auto-detection to prevent deprecated next export
+        env: # Add environment variables here for build-time injection
+          NEXT_PUBLIC_API_URL: https://az-pg-spend-analysis-ai-agent.azurewebsites.net/api
           ###### End of Repository/Build Configurations ######
 
   close_pull_request_job:
