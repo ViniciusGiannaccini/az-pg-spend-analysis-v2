@@ -42,3 +42,12 @@ frontend/
 
 # macOS
 .DS_Store
+
+# Runtime Data (Generated locally, not needed in Cloud)
+models/taxonomy_jobs/
+
+# Local Workers
+run_local_worker.py
+__blobstorage__
+__queuestorage__
+__azurite_db*__.json

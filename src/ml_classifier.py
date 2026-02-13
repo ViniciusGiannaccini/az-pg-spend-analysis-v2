@@ -122,6 +122,90 @@ def load_model(sector: str = "varejo", models_dir: str = "models") -> Tuple:
     )
 
 
+def load_model_for_sector(sector: str) -> Tuple:
+    """
+    Load ALL model components for a sector, including ML models and Dictionary patterns.
+    
+    This matches the signature expected by core_classification.py:
+    vectorizer, classifier, label_encoder, patterns, terms, taxonomy, hierarchy
+    """
+    import pandas as pd
+    from src.taxonomy_engine import build_patterns
+    
+    # 1. Load ML Model (Standard)
+    try:
+        if sector.strip().capitalize() == "Padrão":
+             # Padrão usually uses LLM only, but we return Nones for ML
+             vectorizer, classifier, label_encoder, hierarchy = None, None, None, None
+        else:
+             vectorizer, classifier, label_encoder, hierarchy = load_model(sector)
+    except Exception as e:
+        print(f"Warning: ML model not found for {sector}: {e}")
+        vectorizer, classifier, label_encoder, hierarchy = None, None, None, None
+
+    # 2. Load Dictionary Patterns (Default)
+    # Try to find Spend_Taxonomy.xlsx in current directory or parent
+    patterns, terms, taxonomy = {}, {}, {}
+    
+    # Potential paths for the dictionary
+    possible_paths = [
+        "Spend_Taxonomy.xlsx",
+        "../Spend_Taxonomy.xlsx",
+        "/home/site/wwwroot/Spend_Taxonomy.xlsx"
+    ]
+    
+    dict_path = None
+    for p in possible_paths:
+        if os.path.exists(p):
+            dict_path = p
+            break
+            
+    if dict_path:
+        try:
+            print(f"Loading dictionary from {dict_path} for sector {sector}...")
+            # We assume the dictionary file has sheets. We need to find the right logical subset?
+            # Actually build_patterns takes a DataFrame.
+            # Usually the dictionary file has ALL sectors. We need to filter?
+            # Spend_Taxonomy.xlsx usually has a "Base" sheet or similar.
+            # BUT, usually 'build_patterns' expects a DF with columns N1, N2...
+            # If we load the whole file, we might get a mix.
+            # For "Padrão", we might not use this.
+            # For "Varejo", we might want to filter by sector if the column exists?
+            # Let's just load it raw.
+            
+            # Note: This is an expensive operation. Ideally cached.
+            # But local worker is long running, so maybe we cache results in _MODEL_CACHE?
+            
+            cached_patterns = _MODEL_CACHE.get(sector, {}).get('patterns')
+            if cached_patterns:
+                 patterns, terms, taxonomy = cached_patterns
+            else:
+                xl = pd.ExcelFile(dict_path)
+                # Heuristic: Find first sheet that looks like data
+                sheet = xl.sheet_names[0]
+                for s in xl.sheet_names:
+                    if "base" in s.lower() or "dados" in s.lower() or "taxonomy" in s.lower():
+                        sheet = s
+                        break
+                
+                df_dict = pd.read_excel(dict_path, sheet_name=sheet)
+                
+                # Filter by sector if feasible? 
+                # Start simple: pass the whole DF to build_patterns.
+                patterns, terms, taxonomy = build_patterns(df_dict)
+                
+                # Update cache
+                if sector not in _MODEL_CACHE: _MODEL_CACHE[sector] = {}
+                _MODEL_CACHE[sector]['patterns'] = (patterns, terms, taxonomy)
+                
+        except Exception as e:
+            print(f"Failed to load dictionary patterns: {e}")
+    else:
+        print("Spend_Taxonomy.xlsx not found. Running without dictionary patterns.")
+
+    return vectorizer, classifier, label_encoder, patterns, terms, taxonomy, hierarchy
+
+
 def predict(
     texts: List[str],
     sector: str = "varejo",
@@ -235,6 +319,10 @@ def predict_single(
     results = predict([text], sector, vectorizer, classifier, label_encoder, hierarchy, top_k)
     return results[0]
 
+
+
+# Alias for compatibility with core_classification.py
+predict_batch = predict
 
 if __name__ == "__main__":
     # Test the classifier

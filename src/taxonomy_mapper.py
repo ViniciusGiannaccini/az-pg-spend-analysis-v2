@@ -27,7 +27,7 @@ def load_custom_hierarchy(base64_content: str) -> Dict[str, Dict]:
     
     # Try to read as Excel or CSV
     try:
-        df = pd.read_excel(io.BytesIO(file_bytes))
+        df = pd.read_excel(io.BytesIO(file_bytes), engine='openpyxl')
     except Exception:
         try:
             df = pd.read_csv(io.BytesIO(file_bytes))
@@ -62,7 +62,8 @@ def load_custom_hierarchy(base64_content: str) -> Dict[str, Dict]:
 
 def apply_custom_hierarchy(
     top_candidates: List[Dict],
-    custom_hierarchy: Dict[str, Dict]
+    custom_hierarchy: Dict[str, Dict],
+    semantic_map: Optional[Dict[str, str]] = None
 ) -> Tuple[Optional[Dict], Optional[str]]:
     """
     Find the best matching N4 from top candidates in the custom hierarchy.
@@ -90,9 +91,16 @@ def apply_custom_hierarchy(
     # Second pass: Fuzzy matching (only if ML provides a strong lead)
     # We take the top ML candidate and find the most similar string in our custom hierarchy keys
     if top_candidates:
+        n4_ml = str(top_candidates[0].get('N4', '')).lower().strip()
+        
+        # 2a. Check Semantic Map (LLM-based) if provided
+        if n4_ml and semantic_map and n4_ml in semantic_map:
+            mapped_key = semantic_map[n4_ml]
+            if mapped_key in custom_hierarchy:
+                return custom_hierarchy[mapped_key], top_candidates[0]['N4']
+
+        # 2b. Fuzzy matching
         try:
-            from difflib import get_close_matches
-            n4_ml = str(top_candidates[0].get('N4', '')).lower().strip()
             if n4_ml:
                 # Find best string match (min score 0.6)
                 matches = get_close_matches(n4_ml, custom_hierarchy.keys(), n=1, cutoff=0.6)
@@ -101,6 +109,42 @@ def apply_custom_hierarchy(
                     return custom_hierarchy[matched_key], top_candidates[0]['N4']
         except Exception:
             pass # Fall back to None if fuzzy matching fails
+
+
+def resolve_unmatched_with_llm(
+    unmatched_n4s: List[str],
+    custom_hierarchy: Dict[str, Dict]
+) -> Dict[str, str]:
+    """
+    Use LLM to semantically map unmatched standard N4s to custom hierarchy keys.
+    
+    Args:
+        unmatched_n4s: List of N4s from standard model that didn't match.
+        custom_hierarchy: The target hierarchy to map to.
+        
+    Returns:
+        Dictionary mapping Standard N4 -> Custom N4 key (lowercase)
+    """
+    if not unmatched_n4s:
+        return {}
+        
+    # Lazy import to avoid circular dependency
+    from src.llm_classifier import map_categories_with_llm
+    
+    # Get all target N4 keys
+    target_categories = sorted(list(set(h['N4'] for h in custom_hierarchy.values())))
+    
+    # Call LLM
+    mapping = map_categories_with_llm(unmatched_n4s, target_categories)
+    
+    # Normalize keys and values for lookup
+    normalized_map = {}
+    for k, v in mapping.items():
+        if v and v != "Não Identificado":
+            # Map lowercase standard N4 -> lowercase custom N4 key
+            normalized_map[k.lower().strip()] = v.lower().strip()
+            
+    return normalized_map
 
     # No match found
     return None, None

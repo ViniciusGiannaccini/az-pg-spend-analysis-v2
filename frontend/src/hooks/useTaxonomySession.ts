@@ -65,6 +65,8 @@ interface UseTaxonomySessionReturn {
     isLoadingSectors: boolean
     /** Additional context about the client/project */
     clientContext: string
+    /** Progress of the current operation */
+    progress: { message: string, pct: number } | null
 
     // Actions
     /** Updates the selected sector */
@@ -109,6 +111,7 @@ export function useTaxonomySession(): UseTaxonomySessionReturn {
     const [sectors, setSectors] = useState<string[]>([])
     const [isLoadingSectors, setIsLoadingSectors] = useState(true)
     const [clientContext, setClientContext] = useState('')
+    const [progress, setProgress] = useState<{ message: string, pct: number } | null>(null)
 
     const activeSession = sessions.find(s => s.sessionId === activeSessionId)
 
@@ -230,6 +233,7 @@ export function useTaxonomySession(): UseTaxonomySessionReturn {
 
     const handleFileSelect = async (file: File, fileContent: string, hierarchyContent?: string) => {
         setIsProcessing(true)
+        setProgress({ message: "Iniciando upload...", pct: 0 })
 
         try {
             let dictionaryBase64: string | undefined = undefined;
@@ -253,7 +257,8 @@ export function useTaxonomySession(): UseTaxonomySessionReturn {
                 sector,
                 file.name,
                 hierarchyContent,
-                clientContext
+                clientContext,
+                (msg, pct) => setProgress({ message: msg, pct }) // Progress Callback
             )
 
             if (!result || !result.sessionId) {
@@ -342,7 +347,8 @@ export function useTaxonomySession(): UseTaxonomySessionReturn {
         handleNewUpload,
         handleFileSelect,
         handleClearHistory,
-        handleDeleteSession
+        handleDeleteSession,
+        progress
     }
 }
 

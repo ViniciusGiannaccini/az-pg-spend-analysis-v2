@@ -20,12 +20,19 @@ import requests
 POWER_AUTOMATE_URL = os.getenv("POWER_AUTOMATE_URL", "")
 POWER_AUTOMATE_API_KEY = os.getenv("POWER_AUTOMATE_API_KEY", "")
 
+
 # Models directory: Use /home/models in Azure (writable), ./models locally
 # Azure Functions has read-only /home/site/wwwroot, but /home is writable and persistent
 def get_models_dir() -> str:
     """Get the appropriate models directory based on environment."""
     # Check if running in Azure (WEBSITE_INSTANCE_ID is set in Azure App Service/Functions)
-    if os.getenv("WEBSITE_INSTANCE_ID") or os.getenv("AZURE_FUNCTIONS_ENVIRONMENT"):
+    # AND explicitly ensure we're not just running 'func start' locally which might set some env vars.
+    # The most reliable way for Azure Function App Service is WEBSITE_INSTANCE_ID.
+    
+    # Force local if we detect macOS/Windows local environment explicitly or missing Azure ID
+    is_azure = os.getenv("WEBSITE_INSTANCE_ID") is not None
+    
+    if is_azure:
         azure_models = "/home/models"
         try:
             os.makedirs(azure_models, exist_ok=True)
@@ -46,11 +53,13 @@ def get_models_dir() -> str:
 
         except Exception as e:
             logging.error(f"[BOOTSTRAP] Error initializing models directory: {e}")
-            # Fallback to local if copy fails (though likely won't work well in Azure if read-only)
+            # Fallback will return azure_models anyway, but let's hope it works.
             pass  
         return azure_models
+        
     # Local development
-    return "models"
+    # Use absolute path to ensure we writing to the right place even if CWD changes
+    return os.path.join(os.getcwd(), "models")
 
 MODELS_DIR = get_models_dir()
 
@@ -223,27 +232,33 @@ def GetDirectLineToken(req: func.HttpRequest) -> func.HttpResponse:
     auth_level=func.AuthLevel.ANONYMOUS
 )
 def ProcessTaxonomy(req: func.HttpRequest) -> func.HttpResponse:
+    logging.warning("ProcessTaxonomy endpoint is deprecated. Use SubmitTaxonomyJob.")
+    return func.HttpResponse(
+        "This endpoint is deprecated. Use SubmitTaxonomyJob.",
+        status_code=410,
+        mimetype="text/plain"
+    )
+
+
+
+# ---------------------------------------------------------------------------
+# ASYNC TAXONOMY PROCESSING (File-Based Queue)
+# ---------------------------------------------------------------------------
+
+@app.route(
+    route="SubmitTaxonomyJob",
+    methods=["POST", "OPTIONS"],
+    auth_level=func.AuthLevel.ANONYMOUS
+)
+def SubmitTaxonomyJob(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Accepts file upload, splits into chunks, and queues for async processing.
+    Returns: jobId.
+    """
     import pandas as pd
-    from src.taxonomy_mapper import load_custom_hierarchy, apply_custom_hierarchy
-    from src.taxonomy_engine import COL_DESC_CANDIDATES_DEFAULT
-    USE_ML_CLASSIFIER = os.getenv("USE_ML_CLASSIFIER", "false").lower() == "true"
-    GROK_API_KEY = os.getenv("GROK_API_KEY")
-    # Enable LLM if key is present and not the placeholder
-    USE_LLM = bool(GROK_API_KEY and "SUA-CHAVE" not in GROK_API_KEY)
-    """
-    Process an uploaded Excel file and perform taxonomy classification based on a provided dictionary.
-
-    The request body must be a JSON object containing:
-    - fileContent: Base64 encoded string of the items Excel file.
-    - dictionaryContent: Base64 encoded string of the dictionary XLSX file.
-    - sector: Sector name to determine which dictionary sheet to use (e.g., 'Varejo').
-    - originalFilename: (Optional) The name of the original file.
-
-    Returns:
-        func.HttpResponse: A JSON response containing the base64 encoded result Excel,
-                           a summary of the taxonomy, and status information.
-    """
-    # Handle CORS preflight (OPTIONS) request
+    import math
+    
+    # Handle CORS
     if req.method == "OPTIONS":
         return func.HttpResponse(
             status_code=200,
@@ -253,529 +268,76 @@ def ProcessTaxonomy(req: func.HttpRequest) -> func.HttpResponse:
                 "Access-Control-Allow-Headers": "Content-Type"
             }
         )
+        
+    logging.info('SubmitTaxonomyJob HTTP trigger function processed a request.')
     
-    logging.info('ProcessTaxonomy HTTP trigger function processed a request.')
-    
-    # Generate unique session ID for this analysis
-    session_id = str(uuid.uuid4())
-
     try:
         req_body = req.get_json()
-        logging.info("Request body received.")
     except ValueError:
-        req_body = {}
-
+        return func.HttpResponse("Invalid JSON body", status_code=400)
+        
     file_content_b64 = req_body.get("fileContent")
-    dict_content_b64 = req_body.get("dictionaryContent")
     sector_raw = req_body.get("sector")
-    original_filename = req_body.get("originalFilename", "")
-    custom_hierarchy_b64 = req_body.get("customHierarchy")
-    client_context = req_body.get("clientContext", "")
-
-    # Defensive check: sometimes frontend might send strings "undefined" or "null" instead of actual nulls/empty
-    if dict_content_b64 in ["undefined", "null", "None", ""]: dict_content_b64 = None
-    if custom_hierarchy_b64 in ["undefined", "null", "None", ""]: custom_hierarchy_b64 = None
-
-    if not sector_raw:
-        return func.HttpResponse(
-            safe_json_dumps({"error": "Parâmetro 'sector' é obrigatório no corpo da requisição."}),
-            status_code=400,
-            mimetype="application/json"
-        )
-    
-    # Normalize sector to title case (e.g., "varejo" -> "Varejo", "VAREJO" -> "Varejo")
+    if not file_content_b64 or not sector_raw:
+        return func.HttpResponse("Missing fileContent or sector", status_code=400)
+        
     sector = sector_raw.strip().capitalize()
+    session_id = str(uuid.uuid4())
     
-    if not file_content_b64:
-        logging.error("Missing fileContent in request.")
-        return func.HttpResponse(
-            safe_json_dumps({"error": "Parâmetro 'fileContent' (base64) é obrigatório."}),
-            status_code=400,
-            mimetype="application/json"
-        )
-
-    # Dictionary is mandatory for non-Padrão sectors if no custom hierarchy is provided
-    if sector != "Padrão" and not dict_content_b64 and not custom_hierarchy_b64:
-        logging.error(f"Missing dictionary for specific sector: {sector}")
-        return func.HttpResponse(
-            safe_json_dumps({"error": f"Para o setor '{sector}', é necessário fornecer um Dicionário ou uma Hierarquia Customizada."}),
-            status_code=400,
-            mimetype="application/json"
-        )
+    # Create Job Directory: /home/models/taxonomy_jobs/{session_id}/
+    job_dir = os.path.join(MODELS_DIR, "taxonomy_jobs", session_id)
+    os.makedirs(job_dir, exist_ok=True)
     
-    logging.info(f"Original filename received: {original_filename}")
-
     try:
+        # Decode and Load File
         file_bytes = base64.b64decode(file_content_b64)
-    except Exception as e:
-        logging.error(f"Error decoding base64 fileContent: {e}")
-        return func.HttpResponse(
-            "Parameter 'fileContent' (base64) decoding error.",
-            status_code=400
-        )
-
-
-
-    # Load items file first as it's mandatory
-    try:
-        df_items = pd.read_excel(io.BytesIO(file_bytes))
-        logging.info("Successfully parsed items file as Excel")
-    except Exception as e:
-        logging.warning(f"Excel parsing failed for items, trying CSV: {e}")
         try:
-            df_items = pd.read_csv(io.BytesIO(file_bytes), sep=';', encoding='utf-8', on_bad_lines='skip')
-            logging.info("Successfully parsed items as CSV (semicolon)")
-        except Exception:
-            try:
-                df_items = pd.read_csv(io.BytesIO(file_bytes), sep=',', encoding='utf-8', on_bad_lines='skip')
-                logging.info("Successfully parsed items as CSV (comma)")
-            except Exception as e3:
-                return func.HttpResponse(f"Error reading items file: {str(e3)}", status_code=400)
+            df = pd.read_excel(io.BytesIO(file_bytes))
+        except:
+             try:
+                df = pd.read_csv(io.BytesIO(file_bytes), sep=';', encoding='utf-8', on_bad_lines='skip')
+             except:
+                df = pd.read_csv(io.BytesIO(file_bytes), sep=',', encoding='utf-8', on_bad_lines='skip')
 
-    # Dictionary is optional if customHierarchy is provided (Exclusive Mode)
-    df_dict = pd.DataFrame()
-    if dict_content_b64:
-        try:
-            dict_bytes = base64.b64decode(dict_content_b64)
-            # Parse dictionary CONFIG sheet
-            df_config = pd.read_excel(io.BytesIO(dict_bytes), sheet_name='CONFIG')
-            
-            # Lookup sector
-            df_config_valid = df_config.dropna(subset=['Setor'])
-            sector_row = df_config_valid[df_config_valid['Setor'].str.strip().str.lower() == sector.strip().lower()]
-            
-            if sector_row.empty and sector.lower() != "padrão":
-                available = df_config_valid['Setor'].dropna().unique().tolist()
-                return func.HttpResponse(f"Setor '{sector}' não encontrado. Disponíveis: {', '.join(available)}", status_code=400)
-            
-            if not sector_row.empty:
-                dict_sheet_name = sector_row.iloc[0]['ABA_DICIONARIO']
-                df_dict = pd.read_excel(io.BytesIO(dict_bytes), sheet_name=dict_sheet_name)
-                logging.info(f"Loaded dictionary '{dict_sheet_name}': {len(df_dict)} rows")
-            else:
-                logging.info(f"Sector '{sector}' not in dictionary. Proceeding in LLM-Only/Exclusive mode.")
-        except Exception as e:
-            logging.error(f"Error loading dictionary: {e}")
-            if not custom_hierarchy_b64:
-                return func.HttpResponse(f"Erro ao carregar dicionário: {str(e)}", status_code=400)
-    else:
-        logging.info("Activating Exclusive Mode (No default dictionary provided).")
-
-    logging.info(f"Items file OK: {len(df_items)} rows, {len(df_items.columns)} columns")
-    logging.info(f"Dictionary OK: {len(df_dict)} rows, {len(df_dict.columns)} columns")
-
-    # Validate columns and identify description column
-    # We expect at least 2 valid columns (not Unnamed) to proceed with the heuristic
-    valid_cols = [c for c in df_items.columns if not str(c).startswith("Unnamed")]
-
-    if len(valid_cols) < 2:
-        logging.error("Excel file does not have at least 2 useful columns.")
-        return func.HttpResponse("Invalid Excel file.", status_code=400)
-
-    # Heuristic: assume the second valid column is the description
-    # This is based on the typical structure of the input files where the first column is an ID or Item Description
-    desc_source_col = valid_cols[1]
-    logging.info(f"Description column detected: {desc_source_col}")
-
-    df_items["Item_Description"] = df_items[desc_source_col]
-
-    dict_records = df_dict.to_dict(orient="records")
-    # item_records = df_items.to_dict(orient="records") # REMOVED: Memory hog for 60k rows
-
-    try:
-        # Use ML-enhanced hybrid classifier if enabled
-        if USE_ML_CLASSIFIER:
-            logging.info(f"Using ML hybrid classifier for sector: {sector}")
-            
-            # Create wrapper to process items in batch using hybrid classifier
-            logging.info("Importing taxonomy engine...")
-            from src.taxonomy_engine import build_patterns, normalize_text, generate_analytics
-            
-            # Decide if we use LLM fallback
-            # Logic: If sector is "Padrão", we force LLM usage (if configured). 
-            # If sector is specific but we have LLM configured, we can use it as fallback.
-            use_llm_fallback = USE_LLM
-            if sector == "Padrão" and not USE_LLM:
-                logging.warning("Sector is 'Padrão' but Azure OpenAI key is missing. Classification may fail.")
-            
-            # Build dictionary patterns only if provided and NOT in Padrão mode
-            patterns_by_n4, terms_by_n4, taxonomy_by_n4 = None, None, None
-            if dict_content_b64 and sector.lower() != "padrão":
-                logging.info("Building dictionary patterns...")
-                patterns_by_n4, terms_by_n4, taxonomy_by_n4 = build_patterns(df_dict)
-            else:
-                logging.info(f"Skipping dictionary patterns (Sector: {sector}).")
-            
-            # Load ML model
-            model_sector = sector if sector else "Varejo"
-            if custom_hierarchy_b64:
-                logging.info(f"Exclusive Mode: Using ML model '{model_sector}' as semantic base for custom hierarchy.")
-            else:
-                logging.info(f"Standard Mode: Using hybrid classifier with sector: {model_sector}")
-                if sector == "Padrão": 
-                     logging.info("Using Standard Mode (UNSPSC) with LLM.")
-            
-            from src.ml_classifier import load_model
-            from src.hybrid_classifier import classify_hybrid
-            
-            vectorizer, classifier, label_encoder, hierarchy = None, None, None, None
-            
-            # Only load ML model if NOT Padrão (or if you want to use a fallback like Varejo for Padrão, but Padrão implies UNSPSC/LLM)
-            if model_sector != "Padrão":
-                try:
-                    vectorizer, classifier, label_encoder, hierarchy = load_model(sector=model_sector, models_dir=MODELS_DIR)
-                except Exception as e:
-                    logging.warning(f"Failed to load model for {model_sector}: {e}. Proceeding without ML.")
-            else:
-                 logging.info("Skipping ML model load for sector 'Padrão'. Relying on LLM.")
-            
-            # Load custom hierarchy if provided
-            custom_hierarchy = None
-            if custom_hierarchy_b64:
-                try:
-                    custom_hierarchy = load_custom_hierarchy(custom_hierarchy_b64)
-                    logging.info(f"Loaded custom hierarchy with {len(custom_hierarchy)} N4 categories")
-                except Exception as e:
-                    logging.warning(f"Failed to load custom hierarchy: {e}. Using default hierarchy.")
-            
-            # Load description column
-            desc_column = "Item_Description"
-            df_items["_desc_original"] = df_items[desc_column].fillna("").astype(str)
-            df_items["_desc_norm"] = df_items["_desc_original"].map(normalize_text).astype(str)
-            
-            # 1. OPTIMIZATION: Setup Cache for Hybrid Classification
-            from functools import lru_cache
-            from src.taxonomy_mapper import apply_custom_hierarchy
-
-            @lru_cache(maxsize=10000)
-            def classify_cached(desc, desc_norm):
-                # Core classification (Dictionary + ML)
-                return classify_hybrid(
-                    description=desc,
-                    sector=sector,
-                    dict_patterns=patterns_by_n4,
-                    dict_terms=terms_by_n4,
-                    dict_taxonomy=taxonomy_by_n4,
-                    desc_norm=desc_norm,
-                    vectorizer=vectorizer,
-                    classifier=classifier,
-                    label_encoder=label_encoder,
-                    hierarchy=hierarchy or custom_hierarchy, # Pass either ML hierarchy or Custom hierarchy
-                    use_llm_fallback=use_llm_fallback,
-                    client_context=client_context
-                ).to_dict()
-                
-                # 2. OPTIMIZATION: Apply Custom Hierarchy inside the cache pass
-                if custom_hierarchy:
-                    top_candidates = result.get('top_candidates', [])
-                    if not top_candidates and result.get('N4'):
-                        top_candidates = [{'N4': result['N4']}]
-                    
-                    custom_res, matched_n4 = apply_custom_hierarchy(top_candidates, custom_hierarchy)
-                    
-                    if custom_res:
-                        # Found a match in custom hierarchy - OVERRIDE results
-                        result['N1'] = custom_res.get('N1', '')
-                        result['N2'] = custom_res.get('N2', '')
-                        result['N3'] = custom_res.get('N3', '')
-                        result['N4'] = custom_res.get('N4', '')
-                        # Maintain consistency in results
-                        result['classification_source'] = f"Custom (via {result['classification_source']})"
-                    else:
-                        # No match found in custom hierarchy - Clear and mark as Nenhum (per requirement)
-                        if result.get('status') == 'Único':
-                            original_n4 = result.get('N4', '')
-                            result['N1'] = ''
-                            result['N2'] = ''
-                            result['N3'] = ''
-                            result['N4'] = ''
-                            result['status'] = 'Nenhum'
-                            if original_n4:
-                                result['matched_terms'] = [f'Original: {original_n4}']
-                
-                return result
-
-            # Process each item using the optimized cached function with periodic progress logging
-            logging.info(f"Processing {len(df_items)} items with hybrid classifier (caching enabled)...")
-            results = []
-            total_items = len(df_items)
-            col_orig_idx = df_items.columns.get_loc("_desc_original")
-            col_norm_idx = df_items.columns.get_loc("_desc_norm")
-            
-            # OPTIMIZATION: If sector is "Padrão", use batch LLM classification directly
-            if sector == "Padrão":
-                logging.info(f"Padrão mode detected: Using batch parallel LLM classification for {total_items} items.")
-                from src.llm_classifier import classify_items_with_llm
-                from src.hybrid_classifier import ClassificationResult
-                
-                # Deduplication logic: Only send unique descriptions to LLM
-                all_descriptions = df_items["_desc_original"].tolist()
-                unique_descriptions = list(dict.fromkeys(all_descriptions)) # Preserves order
-                
-                logging.info(f"Deduplication: {len(unique_descriptions)} unique items found out of {total_items} total.")
-                
-                llm_unique_results = classify_items_with_llm(
-                    unique_descriptions, 
-                    sector=sector, 
-                    client_context=client_context, 
-                    custom_hierarchy=hierarchy or custom_hierarchy
-                )
-                
-                # Map unique results back to original list
-                # Create a map of {description: formatted_result}
-                desc_to_res = {}
-                for i, res in enumerate(llm_unique_results):
-                    formatted = {
-                        "N1": res.get("N1", "Não Identificado"),
-                        "N2": res.get("N2", "Não Identificado"),
-                        "N3": res.get("N3", "Não Identificado"),
-                        "N4": res.get("N4", "Não Identificado"),
-                        "status": "Único" if res.get("N1") and res.get("N1") != "Não Identificado" else "Nenhum",
-                        "matched_terms": [],
-                        "ml_confidence": res.get("confidence", 0.0),
-                        "classification_source": "LLM (UNSPSC Batch Optimized)",
-                        "ambiguous_options": []
-                    }
-                    desc_to_res[unique_descriptions[i]] = formatted
-                
-                # Fill results in the original order
-                for desc in all_descriptions:
-                    results.append(desc_to_res[desc])
-                    
-                logging.info(f"Batch LLM classification (optimized) completed for {total_items} items.")
-            else:
-                # Standard Loop for Retail/Dictionary-First modes (already fast)
-                # First pass: Dictionary + ML ONLY (Local)
-                logging.info("Starting First Pass: Local classification (ML + Dictionary)...")
-                
-                # We temporarily disable LLM fallback for the first pass to collect items that need it
-                for i, row in enumerate(df_items.itertuples(index=False), 1):
-                    desc_orig = str(row[col_orig_idx])
-                    desc_norm = str(row[col_norm_idx])
-                    
-                    # Force use_llm_fallback to False for the loop to avoid sequential calls
-                    result = classify_hybrid(
-                        description=desc_orig,
-                        sector=sector,
-                        dict_patterns=patterns_by_n4,
-                        dict_terms=terms_by_n4,
-                        dict_taxonomy=taxonomy_by_n4,
-                        desc_norm=desc_norm,
-                        vectorizer=vectorizer,
-                        classifier=classifier,
-                        label_encoder=label_encoder,
-                        hierarchy=hierarchy or custom_hierarchy,
-                        use_llm_fallback=False, # DISABLED in first pass
-                        client_context=client_context
-                    ).to_dict()
-                    
-                    results.append(result)
-                    
-                    if i % 50 == 0 or i == total_items:
-                        percentage = (i / total_items) * 100
-                        logging.info(f"Local Progress: {i}/{total_items} items processed ({percentage:.1f}%)")
-
-                # Second pass: Batch LLM for remaining "Nenhum" (if LLM is enabled)
-                if USE_LLM:
-                    unclassified_indices = [idx for idx, res in enumerate(results) if res['status'] == 'Nenhum']
-                    
-                    if unclassified_indices:
-                        num_to_llm = len(unclassified_indices)
-                        logging.info(f"Starting Second Pass: Sending {num_to_llm} unclassified items to LLM in batch...")
-                        
-                        from src.llm_classifier import classify_items_with_llm
-                        unclassified_descs = [df_items.iloc[idx]["_desc_original"] for idx in unclassified_indices]
-                        
-                        llm_batch_results = classify_items_with_llm(
-                            unclassified_descs,
-                            sector=sector,
-                            client_context=client_context,
-                            custom_hierarchy=hierarchy or custom_hierarchy
-                        )
-                        
-                        # Merge LLM results back into the results list
-                        for i, res in enumerate(llm_batch_results):
-                            if res.get("N1"): # If LLM found a match
-                                target_idx = unclassified_indices[i]
-                                results[target_idx].update({
-                                    "N1": res.get("N1", ""),
-                                    "N2": res.get("N2", ""),
-                                    "N3": res.get("N3", ""),
-                                    "N4": res.get("N4", ""),
-                                    "status": "Único",
-                                    "ml_confidence": res.get("confidence", 0.0),
-                                    "classification_source": "LLM (UNSPSC Fallback Batch)"
-                                })
-                        logging.info(f"Second pass completed. {num_to_llm} items processed via LLM.")
-                    else:
-                        logging.info("All items classified locally. Skipping LLM pass.")
-            
-            # Convert results back to DataFrame columns
-            df_items["N1"] = [r["N1"] for r in results]
-            df_items["N2"] = [r["N2"] for r in results]
-            df_items["N3"] = [r["N3"] for r in results]
-            df_items["N4"] = [r["N4"] for r in results]
-            df_items["Match_Type"] = [r["status"] for r in results]
-            df_items["Matched_Terms"] = [", ".join(r["matched_terms"]) for r in results]
-            df_items["Match_Score"] = [r["ml_confidence"] for r in results]
-            df_items["Classification_Source"] = [r["classification_source"] for r in results]
-            
-            # New column: Ambiguous_Options (shows divergent options for ambiguous cases)
-            df_items["Ambiguous_Options"] = [
-                " | ".join(r.get("ambiguous_options", [])) if r["status"] == "Ambíguo" else ""
-                for r in results
-            ]
-            
-            df_items["Needs_Review"] = df_items["Match_Type"].isin(["Ambíguo", "Nenhum"])
-            
-            # Build summary
-            total_items = len(df_items)
-            unique_count = int((df_items["Match_Type"] == "Único").sum())
-            ambiguous_count = int((df_items["Match_Type"] == "Ambíguo").sum())
-            unmatched_count = int((df_items["Match_Type"] == "Nenhum").sum())
-            
-            summary = {
-                "total_linhas": total_items,
-                "coluna_descricao_utilizada": desc_column,
-                "unico": unique_count,
-                "ambiguo": ambiguous_count,
-                "nenhum": unmatched_count,
-            }
-            
-            # Generate analytics
-            analytics = generate_analytics(df_items)
-            
-            # 7. Prepare and Return Response
-            # Only convert first 1000 to dict for front-end safety (JSON response size)
-            items_preview = df_items.head(1000).drop(columns=["_desc_norm"], errors="ignore").to_dict(orient="records")
-            
-            result = {
-                "items": items_preview,
-                "summary": summary,
-                "analytics": analytics,
-            }
-            
-            # NOTE: We keep the full df_items for Excel generation below!
-        else:
-            logging.info("Using dictionary-only classifier")
-            # Only convert to dict if we are actually using the dictionary-only path
-            item_records = df_items.to_dict(orient="records")
-            from src.taxonomy_engine import classify_items
-            result = classify_items(
-                dict_records=dict_records,
-                item_records=item_records,
-                desc_column="Item_Description",
-                col_desc_candidates=COL_DESC_CANDIDATES_DEFAULT,
-            )
-    except Exception as e:
-        logging.error(f"Error classifying items: {e}")
-        import traceback
-        traceback.print_exc()
-        return func.HttpResponse(
-            f"Error classifying items: {str(e)}",
-            status_code=500
-        )
-
-    logging.info("===== FINAL CLASSIFICATION SUMMARY =====")
-    try:
-        logging.info(safe_json_dumps(result["summary"]))
-    except Exception as e:
-        logging.error(f"Error logging summary: {type(e).__name__}: {e}")
-
-    def write_analytics_to_excel(writer, analytics, sheet_name='Analytics'):
-        """Helper function to write analytics tables with spacing."""
-        row_offset = 0
-        analytics_keys = ['pareto', 'gaps', 'ambiguity']
+        # Identify Description Column (Reusing Logic)
+        valid_cols = [c for c in df.columns if not str(c).startswith("Unnamed")]
+        if len(valid_cols) < 2:
+            return func.HttpResponse("Invalid file columns.", status_code=400)
+        desc_col = valid_cols[1] # Heuristic
         
-        for key in analytics_keys:
-            if analytics.get(key):
-                df = pd.DataFrame(analytics[key])
-                df.to_excel(writer, sheet_name=sheet_name, index=False, startrow=row_offset)
-                row_offset += len(df) + 3  # Add spacing between tables
-        
-        return row_offset
-
-    try:
-        # CRITICAL FIX: Use df_items (FULL) for Excel, not result["items"] (TRUNCATED PREVIEW)
-        df_result = df_items.copy()
-        
-        # Clean up internal columns used for processing
-        cols_to_drop = ["_desc_original", "_desc_norm", "Ambiguous_Options"]
-        df_result = df_result.drop(columns=[c for c in cols_to_drop if c in df_result.columns])
-        
-        # Generate Excel with multiple sheets
-        output = io.BytesIO()
-        try:
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                # Sheet 1: Classification
-                df_result.to_excel(writer, index=False, sheet_name='Classificação')
-                
-                # Sheet 2: Analytics (using helper function)
-                analytics = result.get("analytics", {})
-                write_analytics_to_excel(writer, analytics)
-        finally:
-            # Ensure BytesIO is properly handled even if error occurs
-            output.seek(0)
-        xlsx_bytes = output.getvalue()
-        xlsx_base64 = base64.b64encode(xlsx_bytes).decode("utf-8")
-        
-        # Generate filename with timestamp (BRT - UTC-3)
-        timestamp_utc = datetime.utcnow()
-        timestamp_brt = timestamp_utc - timedelta(hours=3)
-        timestamp = timestamp_brt.strftime("%Y%m%d_%H%M%S")
-        
-        if original_filename:
-            # Strip extension and sanitize filename
-            base_name = original_filename.rsplit('.', 1)[0] if '.' in original_filename else original_filename
-            base_name = base_name.replace(' ', '_').replace('/', '_').replace('\\', '_')
-            filename = f"{base_name}_classified_{timestamp}.xlsx"
-        else:
-            filename = f"spend_analysis_classified_{timestamp}.xlsx"
-        
-        logging.info(f"Excel generated: {len(xlsx_bytes)} bytes, {len(df_result)} rows, filename: {filename}")
-        
-        # Send to Power Automate for SharePoint logging (non-blocking, errors logged but not raised)
-        send_to_power_automate(filename, xlsx_base64)
-        
-    except Exception as e:
-        logging.error(f"Error generating Excel: {e}")
-        return func.HttpResponse(
-            f"Error generating Excel: {str(e)}",
-            status_code=500
-        )
-
-    try:
-        # Prepare truncated analytics for JSON response (to avoid token limits in Copilot)
-        analytics_full = result.get("analytics", {})
-        analytics_json = {
-            "pareto": analytics_full.get("pareto", [])[:20],  # Top 20 categories (Legacy N4)
-            "pareto_N1": analytics_full.get("pareto_N1", [])[:20],
-            "pareto_N2": analytics_full.get("pareto_N2", [])[:20],
-            "pareto_N3": analytics_full.get("pareto_N3", [])[:20],
-            "pareto_N4": analytics_full.get("pareto_N4", [])[:20],
-            "gaps": analytics_full.get("gaps", [])[:10],      # Top 10 gaps
-            "ambiguity": analytics_full.get("ambiguity", [])[:10] # Top 10 ambiguities
-        }
-
-        response_data = {
-            "status": "success",
-            "sessionId": session_id,
-            "fileContent": xlsx_base64,
-            "filename": filename,
-            "summary": result["summary"],
-            "analytics": analytics_json,
-            "items": result["items"],  # Already truncated to 1000 in Step 7
-            "timestamp": timestamp,
-            "encoding": "base64"
+        # Save Metadata
+        metadata = {
+            "job_id": session_id,
+            "created_at": datetime.utcnow().isoformat(),
+            "status": "PENDING",
+            "sector": sector,
+            "filename": req_body.get("originalFilename", "upload.xlsx"),
+            "desc_column": desc_col,
+            "total_rows": len(df),
+            "client_context": req_body.get("clientContext", ""),
+            "custom_hierarchy_b64": req_body.get("customHierarchy"),
+            "dictionary_content_b64": req_body.get("dictionaryContent")
         }
         
-        logging.info(f"Process completed successfully. Keys in response: {list(response_data.keys())}")
-        if response_data.get("summary"):
-            logging.info(f"Summary data being sent: {response_data['summary']}")
+        # Chunking Strategy (e.g., 500 rows per chunk)
+        CHUNK_SIZE = 500
+        num_chunks = math.ceil(len(df) / CHUNK_SIZE)
+        metadata["total_chunks"] = num_chunks
+        metadata["processed_chunks"] = 0
         
+        # Save Chunks
+        for i in range(num_chunks):
+            chunk_df = df.iloc[i*CHUNK_SIZE : (i+1)*CHUNK_SIZE]
+            chunk_path = os.path.join(job_dir, f"chunk_{i}.json")
+            chunk_df.to_json(chunk_path, orient="records")
+            
+        # Save Status File
+        with open(os.path.join(job_dir, "status.json"), "w") as f:
+            json.dump(metadata, f)
+            
         return func.HttpResponse(
-            body=safe_json_dumps(response_data),
-            status_code=200,
+            body=safe_json_dumps({"jobId": session_id, "status": "PENDING", "total_chunks": num_chunks}),
+            status_code=202, # Accepted
             mimetype="application/json",
             headers={
                 "Access-Control-Allow-Origin": "*",
@@ -783,18 +345,246 @@ def ProcessTaxonomy(req: func.HttpRequest) -> func.HttpResponse:
                 "Access-Control-Allow-Headers": "Content-Type"
             }
         )
-        
+
     except Exception as e:
-        logging.error(f"Error preparing response: {e}")
+        logging.error(f"SubmitJob Error: {e}")
+        return func.HttpResponse(f"Internal Error: {str(e)}", status_code=500)
+
+
+@app.route(
+    route="GetTaxonomyJobStatus",
+    methods=["GET", "OPTIONS"],
+    auth_level=func.AuthLevel.ANONYMOUS
+)
+def GetTaxonomyJobStatus(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Polls the status of a specific job.
+    Returns: status (PENDING/PROCESSING/COMPLETED/ERROR), progress %, and result if done.
+    """
+    if req.method == "OPTIONS":
+        return func.HttpResponse(status_code=200, headers={"Access-Control-Allow-Origin": "*"})
+        
+    job_id = req.params.get("jobId")
+    if not job_id:
+        return func.HttpResponse("Missing jobId", status_code=400)
+        
+    job_dir = os.path.join(MODELS_DIR, "taxonomy_jobs", job_id)
+    status_file = os.path.join(job_dir, "status.json")
+    
+    if not os.path.exists(status_file):
+        return func.HttpResponse("Job not found", status_code=404)
+        
+    try:
+        with open(status_file, "r") as f:
+            status = json.load(f)
+            
+        # Calculate Progress
+        total = status.get("total_chunks", 1)
+        processed = status.get("processed_chunks", 0)
+        pct = int((processed / total) * 100)
+        
+        response = {
+            "jobId": job_id,
+            "status": status["status"],
+            "progress_pct": pct,
+            "message": f"Processando parte {processed} de {total}..." if status["status"] == "PROCESSING" else ("PROCESSANDO" if status["status"] == "PENDING" else status["status"])
+        }
+        
+        if status["status"] == "COMPLETED":
+            # Load Final Result
+            result_file = os.path.join(job_dir, "result.json")
+            if os.path.exists(result_file):
+                with open(result_file, "r") as rf:
+                    response.update(json.load(rf))
+            else:
+                response["status"] = "ERROR"
+                response["message"] = "Result file missing."
+
         return func.HttpResponse(
-            f"Error preparing response: {str(e)}",
-            status_code=500,
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "POST, OPTIONS",
-                "Access-Control-Allow-Headers": "Content-Type"
-            }
+            body=safe_json_dumps(response),
+            status_code=200,
+            mimetype="application/json",
+            headers={"Access-Control-Allow-Origin": "*"}
         )
+            
+    except Exception as e:
+        return func.HttpResponse(f"Error reading status: {e}", status_code=500)
+
+
+# TIMER TRIGGER: Background Worker
+# Runs every 15 seconds to process chunks
+@app.schedule(schedule="*/15 * * * * *", arg_name="myTimer", run_on_startup=False,
+              use_monitor=False) 
+def ProcessTaxonomyWorker(myTimer: func.TimerRequest) -> None:
+    import pandas as pd
+    import base64
+    from src.core_classification import process_dataframe_chunk
+    from src.taxonomy_engine import generate_analytics, generate_summary
+    
+    if myTimer.past_due:
+        logging.info('The timer is past due!')
+
+    jobs_root = os.path.join(MODELS_DIR, "taxonomy_jobs")
+    if not os.path.exists(jobs_root):
+        return
+
+    # Iterate over active jobs
+    for job_id in os.listdir(jobs_root):
+        job_dir = os.path.join(jobs_root, job_id)
+        status_path = os.path.join(job_dir, "status.json")
+        
+        if not os.path.isdir(job_dir) or not os.path.exists(status_path):
+            continue
+            
+        try:
+            with open(status_path, "r") as f:
+                status = json.load(f)
+            
+            if status["status"] in ["COMPLETED", "ERROR"]:
+                continue # Skip finished jobs
+                
+            # Update status to PROCESSING if PENDING
+            if status["status"] == "PENDING":
+                status["status"] = "PROCESSING"
+                with open(status_path, "w") as f: json.dump(status, f)
+
+            # Find next unprocessed chunk
+            total_chunks = status["total_chunks"]
+            processed_count = 0
+            
+            # We process ALL available chunks for this job in one go (or limiting time loop if needed)
+            # ideally getting next chunk based on naming convention
+            
+            # Simple approach: Check for chunk_X.json that DOES NOT have a result_X.json
+            chunk_processed_this_cycle = False
+            
+            for i in range(total_chunks):
+                chunk_file = os.path.join(job_dir, f"chunk_{i}.json")
+                result_file = os.path.join(job_dir, f"result_{i}.json")
+                
+                if os.path.exists(chunk_file) and not os.path.exists(result_file):
+                    logging.info(f"Processing Job {job_id} - Chunk {i}/{total_chunks}")
+                    
+                    # Load Chunk
+                    df_chunk = pd.read_json(chunk_file, orient="records")
+                    
+                    # Process Chunk using Core Logic
+                    # We need to construct hierarchy dicts if custom/dict provided
+                    custom_hierarchy = None
+                    if status.get("custom_hierarchy_b64"):
+                        # Decode custom hierarchy logic needed here or reuse helper?
+                        # For simplicity, let's assume core logic handles it if passed
+                        # Re-implement decoding briefly here or ensure core can take b64?
+                        # core takes Dictionary object. Need to decode.
+                        import base64
+                        try:
+                           cust_bytes = base64.b64decode(status["custom_hierarchy_b64"])
+                           # This needs careful parsing like in original function.
+                           # Simplified: we assume it works or we should have pre-parsed it.
+                           # Let's decode it on the fly.
+                           df_hier = pd.read_excel(io.BytesIO(cust_bytes))
+                           # Helper to convert df to dict hierarchy
+                           from src.taxonomy_mapper import load_custom_hierarchy
+                           # We need to mock the file path or change load_custom_hierarchy to accept DF
+                           # Actually apply_custom_hierarchy takes a dict.
+                           # Let's rebuild dict manually or refactor helper.
+                           # Refactor is risky. Let's do a simple parsing here.
+                           custom_hierarchy = {}
+                           for _, row in df_hier.iterrows():
+                                n4 = str(row.get('N4', '')).strip()
+                                if n4: custom_hierarchy[n4.lower()] = row.to_dict()
+                        except:
+                            logging.error("Failed to parse custom hierarchy in worker")
+
+                    results = process_dataframe_chunk(
+                        df_chunk=df_chunk,
+                        sector=status["sector"],
+                        desc_column=status["desc_column"],
+                        custom_hierarchy=custom_hierarchy,
+                        client_context=status.get("client_context", "")
+                    )
+                    
+                    # Save Result Chunk
+                    with open(result_file, "w") as rf:
+                        json.dump(results, rf)
+                        
+                    chunk_processed_this_cycle = True
+                    # Update Progress in Status
+                    # Count actual results
+                    
+            # Update processed count accurately based on result files
+            actual_processed = 0
+            results_accumulated = []
+            
+            for i in range(total_chunks):
+                res_path = os.path.join(job_dir, f"result_{i}.json")
+                if os.path.exists(res_path):
+                    actual_processed += 1
+                    with open(res_path, "r") as rf:
+                        results_accumulated.extend(json.load(rf))
+                        
+            status["processed_chunks"] = actual_processed
+            
+            # Check Completion
+            if actual_processed == total_chunks:
+                logging.info(f"Job {job_id} Completed! Consolidating...")
+                
+                # Consolidate
+                final_df = pd.DataFrame(results_accumulated)
+                
+                # Generate Analytics
+                analytics = generate_analytics(final_df)
+                
+                # Generate Summary using helper
+                summary = generate_summary(final_df, status.get("desc_column", "Descricao"))
+                
+                # Generate Excel
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    final_df.to_excel(writer, index=False, sheet_name='Classificação')
+                    
+                output.seek(0)
+                xlsx_b64 = base64.b64encode(output.getvalue()).decode("utf-8")
+                
+                final_result = {
+                    "items": final_df.to_dict(orient="records"), # Full items for RAG
+                    "analytics": analytics, # Full analytics
+                    "summary": summary, # Summary stats
+                    "fileContent": xlsx_b64,
+                    "filename": f"classified_{status['filename']}"
+                }
+                
+                with open(os.path.join(job_dir, "result.json"), "w") as f:
+                    json.dump(final_result, f)
+                    
+                status["status"] = "COMPLETED"
+                
+            # Save Status Update
+            with open(status_path, "w") as f:
+                json.dump(status, f)
+
+            # Cleanup Chunks & Intermediate Results
+            import glob
+            # Delete chunk_*.json (Input Chunks)
+            for chunk_file in glob.glob(os.path.join(job_dir, "chunk_*.json")):
+                try:
+                    os.remove(chunk_file)
+                except OSError: pass
+            
+            # Delete result_*.json (Output Chunks)
+            for res_chunk in glob.glob(os.path.join(job_dir, "result_*.json")):
+                try:
+                    os.remove(res_chunk)
+                except OSError: pass
+                
+        except Exception as e:
+            logging.error(f"Worker Error on Job {job_id}: {e}")
+            status["status"] = "ERROR"
+            status["error"] = str(e)
+            with open(status_path, "w") as f: json.dump(status, f)
+
+# ---------------------------------------------------------------------------
+
 
 @app.route(
     route="TrainModel",

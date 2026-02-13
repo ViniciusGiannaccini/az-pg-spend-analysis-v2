@@ -33,7 +33,7 @@ models/*/dataset_master.csv
 models/*/versions/
 
 # ==== IDE / EDITOR ====
-.vscode/
+.vscode
 .idea/
 *.swp
 *.swo
@@ -60,3 +60,8 @@ coverage/
 # ==== CACHE FILES ====
 /models/cache
 .python_packages
+
+# ==== RUNTIME DATA ====
+models/taxonomy_jobs/
+run_local_worker.pymodels/taxonomy_jobs/
+run_local_worker.py

@@ -45,7 +45,8 @@ export default function TaxonomyPage() {
         handleNewUpload,
         handleFileSelect,
         handleClearHistory,
-        handleDeleteSession
+        handleDeleteSession,
+        progress
     } = useTaxonomySession()
 
     // Local processing state for new tabs
@@ -139,11 +140,48 @@ export default function TaxonomyPage() {
 
             {/* Processing Overlay */}
             {effectiveProcessing && (
-                <div className="fixed inset-0 z-[9999] bg-[#0e0330]/80 backdrop-blur-sm flex items-center justify-center">
-                    <div className="flex flex-col items-center justify-center text-center">
-                        <div className="w-20 h-20 rounded-full border-4 border-white/20 border-t-[#38bec9] animate-spin"></div>
-                        <p className="mt-6 text-lg font-medium text-white">Processando com IA...</p>
-                        <p className="mt-2 text-sm text-white/60">Isso pode levar alguns minutos para arquivos grandes</p>
+                <div className="fixed inset-0 z-[9999] bg-[#0e0330]/90 backdrop-blur-md flex items-center justify-center transition-all duration-500">
+                    <div className="flex flex-col items-center justify-center text-center max-w-md w-full px-6">
+                        {/* Spinner & Icon */}
+                        <div className="relative mb-8">
+                            <div className="w-24 h-24 rounded-full border-4 border-white/10 border-t-[#38bec9] animate-spin"></div>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <svg className="w-8 h-8 text-[#38bec9]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                                </svg>
+                            </div>
+                        </div>
+
+                        {/* Title */}
+                        <h3 className="text-2xl font-bold text-white mb-2 tracking-tight">
+                            {progress?.message ? "Analisando Dados..." : "Iniciando IA..."}
+                        </h3>
+
+                        {/* Status Message */}
+                        <p className="text-white/60 mb-6 font-light h-6 text-sm">
+                            {progress?.message || "Preparando ambiente de processamento..."}
+                        </p>
+
+                        {/* Progress Bar */}
+                        {progress && progress.pct > 0 && (
+                            <div className="w-full bg-white/10 rounded-full h-1.5 mb-2 overflow-hidden">
+                                <div
+                                    className="bg-gradient-to-r from-[#38bec9] to-primary-400 h-1.5 rounded-full transition-all duration-500 ease-out relative"
+                                    style={{ width: `${progress.pct}%` }}
+                                >
+                                    <div className="absolute inset-0 bg-white/30 animate-pulse"></div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Percentage Text */}
+                        {progress && progress.pct > 0 && (
+                            <p className="text-xs font-mono text-[#38bec9] tracking-widest">{progress.pct}% CONCLUÍDO</p>
+                        )}
+
+                        {!progress && (
+                            <p className="text-xs text-white/40 animate-pulse mt-4">Conectando ao worker assíncrono...</p>
+                        )}
                     </div>
                 </div>
             )}

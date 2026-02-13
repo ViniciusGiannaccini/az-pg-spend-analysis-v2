@@ -568,6 +568,10 @@ def generate_analytics(df_items: pd.DataFrame) -> Dict[str, Any]:
     analytics = {}
 
     # 1. Pareto (Volume by Level)
+    # Ensure Match_Type exists (alias from status if necessary)
+    if "Match_Type" not in df_items.columns and "status" in df_items.columns:
+        df_items["Match_Type"] = df_items["status"]
+
     for level in ["N1", "N2", "N3", "N4"]:
         if level not in df_items.columns:
             analytics[f"pareto_{level}"] = []
@@ -637,3 +641,24 @@ def generate_analytics(df_items: pd.DataFrame) -> Dict[str, Any]:
         analytics["ambiguity"] = []
 
     return analytics
+
+def generate_summary(df_items: pd.DataFrame, desc_col_name: str = "Descricao") -> Dict[str, Any]:
+    """
+    Generate summary statistics from the classified items DataFrame.
+    """
+    # Ensure Match_Type exists (alias from status if necessary)
+    if "Match_Type" not in df_items.columns and "status" in df_items.columns:
+        df_items["Match_Type"] = df_items["status"]
+
+    total_items = len(df_items)
+    ambiguous_count = int((df_items["Match_Type"] == "Ambíguo").sum()) if "Match_Type" in df_items.columns else 0
+    unmatched_count = int((df_items["Match_Type"] == "Nenhum").sum()) if "Match_Type" in df_items.columns else 0
+    unique_count = int((df_items["Match_Type"] == "Único").sum()) if "Match_Type" in df_items.columns else 0
+    
+    return {
+        "total_linhas": total_items,
+        "coluna_descricao_utilizada": desc_col_name,
+        "unico": unique_count,
+        "ambiguo": ambiguous_count,
+        "nenhum": unmatched_count,
+    }

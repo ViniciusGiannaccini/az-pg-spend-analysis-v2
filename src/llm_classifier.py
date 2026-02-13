@@ -62,14 +62,14 @@ def classify_items_with_llm(
     results = [None] * len(descriptions)
     
     # Process in larger batches (50 items) and use parallel threads
-    chunk_size = 100
+    chunk_size = 2 # Aggressively small for grok-4 parallelization
     chunks = []
     for i in range(0, len(descriptions), chunk_size):
         chunks.append((i, descriptions[i:i + chunk_size]))
     
-    logging.info(f"Starting parallel LLM classification with {len(chunks)} chunks...")
+    logging.info(f"Starting aggressive parallel LLM classification ({len(chunks)} chunks)...")
     
-    with ThreadPoolExecutor(max_workers=8) as executor:
+    with ThreadPoolExecutor(max_workers=20) as executor:
         future_to_chunk = {
             executor.submit(_call_openai_api, chunk_items, config, sector, client_context, custom_hierarchy): chunk_start 
             for chunk_start, chunk_items in chunks
@@ -285,3 +285,69 @@ def _create_manual_fallback(item_text, reason="Erro na API"):
         "LLM_Explanation": reason,
         "confidence": 0.0
     }
+
+def map_categories_with_llm(
+    source_categories: List[str],
+    target_categories: List[str]
+) -> Dict[str, str]:
+    """
+    Map a list of source categories to the closest target categories 
+    using LLM semantic matching. Using aggressive parallelism for Azure timeouts.
+    """
+    config = get_azure_openai_config()
+    if not config["api_key"] or len(source_categories) == 0 or len(target_categories) == 0:
+        return {}
+
+    target_list_str = "\n".join([f"- {t}" for t in target_categories])
+    
+    system_message = (
+        "Você é um especialista em taxonomias de compras. "
+        "Mapeie termos de origem para a taxonomia de destino do cliente.\n"
+        "TAXONOMIA DE DESTINO:\n"
+        f"{target_list_str}\n\n"
+        "RESPONDA APENAS COM JSON:\n"
+        "{\n"
+        '  "Termo Origem": "Termo Destino"\n'
+        "}"
+    )
+    
+    mappings = {}
+    chunk_size = 2 # Very small for heavy models
+    
+    # Process in parallel like the main classification
+    chunk_items = []
+    for i in range(0, len(source_categories), chunk_size):
+        chunk_items.append(source_categories[i:i+chunk_size])
+        
+    logging.info(f"Starting parallel semantic mapping ({len(chunk_items)} chunks)...")
+    
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        futures = []
+        for chunk in chunk_items:
+            payload = {
+                "model": config["deployment"],
+                "messages": [
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": f"Mapeie: {', '.join(chunk)}"}
+                ],
+                "temperature": 0.0
+            }
+            futures.append(executor.submit(requests.post, 
+                f"{config['endpoint'].rstrip('/')}/chat/completions",
+                headers={"Content-Type": "application/json", "Authorization": f"Bearer {config['api_key']}"},
+                json=payload,
+                timeout=90
+            ))
+            
+        for future in futures:
+            try:
+                response = future.result()
+                if response.status_code == 200:
+                    content = response.json()['choices'][0]['message']['content']
+                    if "```" in content:
+                        content = content.replace("```json", "").replace("```", "").strip()
+                    mappings.update(json.loads(content))
+            except Exception as e:
+                logging.error(f"Parallel mapping chunk failed: {e}")
+                
+    return mappings

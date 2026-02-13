@@ -79,14 +79,15 @@ export const apiClient = {
         return response.data
     },
 
-    // Process Excel file for taxonomy classification
+    // Process Excel file for taxonomy classification (Async Polling)
     async processTaxonomy(
         fileContent: string,
         dictionaryContent: string,
         sector: string,
         originalFilename: string,
         customHierarchy?: string, // Optional custom hierarchy base64
-        clientContext?: string    // Optional client context
+        clientContext?: string,   // Optional client context
+        onProgress?: (msg: string, pct: number) => void // Callback for progress updates
     ): Promise<any> {
         const requestBody: any = {
             fileContent,
@@ -101,11 +102,56 @@ export const apiClient = {
             requestBody.customHierarchy = customHierarchy
         }
 
-        const response = await axios.post(`${API_BASE_URL}/ProcessTaxonomy`, requestBody, {
-            headers: getAuthHeaders(),
-            timeout: 1800000 // 30 minutes for large files
-        })
-        return response.data
+        console.log("[API] Submitting Taxonomy Job...");
+
+        // 1. Submit Job
+        const submitResponse = await axios.post(`${API_BASE_URL}/SubmitTaxonomyJob`, requestBody, {
+            headers: getAuthHeaders()
+        });
+
+        const jobId = submitResponse.data.jobId;
+        console.log(`[API] Job submitted. ID: ${jobId}`);
+
+        if (onProgress) onProgress("Upload concluído. Aguardando início...", 0);
+
+        // 2. Poll for Completion
+        const maxRetries = 600; // 50 minutes max (5s interval)
+        let attempts = 0;
+
+        while (attempts < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5s
+
+            try {
+                const statusRes = await axios.get(`${API_BASE_URL}/GetTaxonomyJobStatus`, {
+                    params: { jobId },
+                    headers: getAuthHeaders()
+                });
+
+                const status = statusRes.data;
+                console.log(`[API] Job Status: ${status.status} (${status.progress_pct}%)`);
+
+                if (onProgress) {
+                    onProgress(status.message || "Processando...", status.progress_pct || 0);
+                }
+
+                if (status.status === 'COMPLETED') {
+                    // The result is the response body itself in the new design (or loaded from it)
+                    // Our backend returns the full JSON when completed.
+                    return { ...status, sessionId: status.jobId || status.sessionId };
+                }
+
+                if (status.status === 'ERROR') {
+                    throw new Error(status.message || "Erro desconhecido no processamento");
+                }
+
+            } catch (e) {
+                console.warn("[API] Polling error (retrying):", e);
+            }
+
+            attempts++;
+        }
+
+        throw new Error("Timeout aguardando processamento do arquivo.");
     },
 
     // Generic method to post any activity to Direct Line
