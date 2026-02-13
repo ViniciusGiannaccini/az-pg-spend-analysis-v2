@@ -27,7 +27,7 @@ def get_azure_openai_config():
     return {
         "endpoint": os.getenv("GROK_API_ENDPOINT", "https://api.x.ai/v1"),
         "api_key": os.getenv("GROK_API_KEY", ""),
-        "deployment": os.getenv("GROK_MODEL_NAME", "grok-beta")
+        "deployment": os.getenv("GROK_MODEL_NAME", "grok-4-0709")
     }
 
 def classify_items_with_llm(
@@ -130,7 +130,7 @@ def _call_openai_api(
         "- Se 'Tubo' contiver 'PVC' -> MRO > Materiais de Construção > Produtos Sanitários e Hidráulicos\n"
         "- Se 'Tubo' contiver 'AÇO' ou 'CARBONO' -> Industrial > Materiais Industriais > Tubulações Industriais\n\n"
         
-        "Analise cada palavra antes de decidir. Use a lógica do modelo 'grok-4-1-fast-reasoning' para desambiguar contextos.\n"
+        "Analise cada palavra antes de decidir. Use a lógica do modelo 'grok-4-0709' para desambiguar contextos.\n"
         "IMPORTANTE: Retorne a resposta APENAS no formato JSON abaixo (array de objetos), sem markdown. "
         "Exemplo de Saída:\n"
         '[{"item": "Tubo PVC 10mm", "N1": "MRO", "N2": "Materiais de Construção", "N3": "Produtos Sanitários", "N4": "Tubos", "confidence": 0.95}, ...]'
