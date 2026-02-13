@@ -267,15 +267,25 @@ def ProcessTaxonomy(req: func.HttpRequest) -> func.HttpResponse:
 
     file_content_b64 = req_body.get("fileContent")
     dict_content_b64 = req_body.get("dictionaryContent")
-    sector = req_body.get("sector")
+    sector_raw = req_body.get("sector")
     original_filename = req_body.get("originalFilename", "")
     custom_hierarchy_b64 = req_body.get("customHierarchy")
     client_context = req_body.get("clientContext", "")
 
     # Defensive check: sometimes frontend might send strings "undefined" or "null" instead of actual nulls/empty
-    if dict_content_b64 in ["undefined", "null", "None"]: dict_content_b64 = None
-    if custom_hierarchy_b64 in ["undefined", "null", "None"]: custom_hierarchy_b64 = None
+    if dict_content_b64 in ["undefined", "null", "None", ""]: dict_content_b64 = None
+    if custom_hierarchy_b64 in ["undefined", "null", "None", ""]: custom_hierarchy_b64 = None
 
+    if not sector_raw:
+        return func.HttpResponse(
+            safe_json_dumps({"error": "Parâmetro 'sector' é obrigatório no corpo da requisição."}),
+            status_code=400,
+            mimetype="application/json"
+        )
+    
+    # Normalize sector to title case (e.g., "varejo" -> "Varejo", "VAREJO" -> "Varejo")
+    sector = sector_raw.strip().capitalize()
+    
     if not file_content_b64:
         logging.error("Missing fileContent in request.")
         return func.HttpResponse(
@@ -284,22 +294,14 @@ def ProcessTaxonomy(req: func.HttpRequest) -> func.HttpResponse:
             mimetype="application/json"
         )
 
-    if not dict_content_b64 and not custom_hierarchy_b64:
-        logging.error("Missing both dictionaryContent and customHierarchy.")
+    # Dictionary is mandatory for non-Padrão sectors if no custom hierarchy is provided
+    if sector != "Padrão" and not dict_content_b64 and not custom_hierarchy_b64:
+        logging.error(f"Missing dictionary for specific sector: {sector}")
         return func.HttpResponse(
-            safe_json_dumps({"error": "É necessário fornecer um Dicionário ou uma Hierarquia Customizada."}),
+            safe_json_dumps({"error": f"Para o setor '{sector}', é necessário fornecer um Dicionário ou uma Hierarquia Customizada."}),
             status_code=400,
             mimetype="application/json"
         )
-    
-    if not sector:
-        return func.HttpResponse(
-            "Parâmetro 'sector' é obrigatório no corpo da requisição.",
-            status_code=400
-        )
-    
-    # Normalize sector to title case (e.g., "varejo" -> "Varejo", "VAREJO" -> "Varejo")
-    sector = sector.strip().capitalize()
     
     logging.info(f"Original filename received: {original_filename}")
 
@@ -312,14 +314,7 @@ def ProcessTaxonomy(req: func.HttpRequest) -> func.HttpResponse:
             status_code=400
         )
 
-    try:
-        dict_bytes = base64.b64decode(dict_content_b64)
-    except Exception as e:
-        logging.error(f"Error decoding base64 dictionaryContent: {e}")
-        return func.HttpResponse(
-            "Parameter 'dictionaryContent' (base64) decoding error.",
-            status_code=400
-        )
+
 
     # Load items file first as it's mandatory
     try:
