@@ -144,7 +144,11 @@ export const apiClient = {
                     throw new Error(status.message || "Erro desconhecido no processamento");
                 }
 
-            } catch (e) {
+            } catch (e: any) {
+                // Stop polling on 404 (job not found) - don't retry forever
+                if (e?.response?.status === 404) {
+                    throw new Error("Job não encontrado no servidor. Por favor, tente novamente.");
+                }
                 console.warn("[API] Polling error (retrying):", e);
             }
 
