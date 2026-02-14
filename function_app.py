@@ -279,7 +279,7 @@ def SubmitTaxonomyJob(req: func.HttpRequest) -> func.HttpResponse:
     sector = sector_raw.strip().capitalize()
     session_id = str(uuid.uuid4())
     
-    # Create Job Directory: /home/models/taxonomy_jobs/{session_id}/
+    # Create Job Directory: {MODELS_DIR}/taxonomy_jobs/{session_id}/
     job_dir = os.path.join(MODELS_DIR, "taxonomy_jobs", session_id)
     os.makedirs(job_dir, exist_ok=True)
     
@@ -553,24 +553,21 @@ def ProcessTaxonomyWorker(myTimer: func.TimerRequest) -> None:
                     json.dump(final_result, f)
                     
                 status["status"] = "COMPLETED"
-                
+
+                # Cleanup Chunks & Intermediate Results (only after successful consolidation)
+                import glob
+                for chunk_file in glob.glob(os.path.join(job_dir, "chunk_*.json")):
+                    try:
+                        os.remove(chunk_file)
+                    except OSError: pass
+                for res_chunk in glob.glob(os.path.join(job_dir, "result_*.json")):
+                    try:
+                        os.remove(res_chunk)
+                    except OSError: pass
+
             # Save Status Update
             with open(status_path, "w") as f:
                 json.dump(status, f)
-
-            # Cleanup Chunks & Intermediate Results
-            import glob
-            # Delete chunk_*.json (Input Chunks)
-            for chunk_file in glob.glob(os.path.join(job_dir, "chunk_*.json")):
-                try:
-                    os.remove(chunk_file)
-                except OSError: pass
-            
-            # Delete result_*.json (Output Chunks)
-            for res_chunk in glob.glob(os.path.join(job_dir, "result_*.json")):
-                try:
-                    os.remove(res_chunk)
-                except OSError: pass
                 
         except Exception as e:
             logging.error(f"Worker Error on Job {job_id}: {e}")
