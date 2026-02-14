@@ -1,53 +1,48 @@
-# Development environment
-.venv
-.vscode
-.idea
-.pytest_cache
+# ==== LOCAL DEVELOPMENT ====
+.venv/
+venv/
+local.settings.json
+run_local_worker.py
 
-# Git files
-.git
-.gitignore
-.editorconfig
+# ==== FRONTEND (deployed separately to Static Web App) ====
+frontend/
 
-# Test directory
+# ==== TESTS & DOCS ====
 tests/
-
-# Documentation
 docs/
-README.md
+fixtures/
+data/
+scripts/
 *.md
 
-# Python cache
-__pycache__
-*.pyc
+# ==== GIT / IDE ====
+.git/
+.gitignore
+.editorconfig
+.vscode/
+.idea/
+.DS_Store
 
-# Local settings (secrets - configured via Azure App Settings)
-local.settings.json
+# ==== AZURITE (local only) ====
+__blobstorage__/
+__queuestorage__/
+__tablestorage__/
+__azurite_db*.json
+azurite_*
 
-# Utility Scripts (local development only)
-scripts/
+# ==== PYTHON CACHE ====
+__pycache__/
+*.py[cod]
 
-# ML Training data (not needed at runtime)
-training/
+# ==== LOGS & DATA ====
+*.log
+log.txt
+*.xlsx
 
-# Exclude training datasets but INCLUDE model artifacts
+# ==== RUNTIME DATA (lives on Azure File Share, not in deploy package) ====
+models/taxonomy_jobs/
 models/*/dataset_master.csv
 models/*/versions/
 
-# Logs
-*.log
-
-# Frontend (deployed separately to Vercel)
-frontend/
-
-# macOS
-.DS_Store
-
-# Runtime Data (Generated locally, not needed in Cloud)
-models/taxonomy_jobs/
-
-# Local Workers
-run_local_worker.py
-__blobstorage__
-__queuestorage__
-__azurite_db*__.json
+# ==== STATIC WEB APP CONFIG (not for Functions) ====
+staticwebapp.config.json

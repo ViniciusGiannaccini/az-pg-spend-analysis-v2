@@ -27,7 +27,7 @@ def get_azure_openai_config():
     return {
         "endpoint": os.getenv("GROK_API_ENDPOINT", "https://api.x.ai/v1"),
         "api_key": os.getenv("GROK_API_KEY", ""),
-        "deployment": os.getenv("GROK_MODEL_NAME", "grok-4-0709")
+        "deployment": os.getenv("GROK_MODEL_NAME", "grok-4-1-fast-reasoning")
     }
 
 def classify_items_with_llm(

@@ -143,9 +143,19 @@ def classify_hybrid(
     Returns:
         ClassificationResult object.
     """
-    # Decision 0: If sector is Padrão, GO LLM FIRST (High priority context)
+    # Decision 0: If sector is Padrão, defer to batch LLM (second pass in core_classification)
+    # When use_llm_fallback=False (first pass), return "Nenhum" so the item is collected
+    # for efficient parallel batch LLM processing instead of calling LLM per-row.
     if sector == "Padrão":
-        # Note: In Padrão mode, we prioritize the LLM and its knowledge + client context
+        if not use_llm_fallback:
+            return ClassificationResult(
+                status="Nenhum",
+                n4="", n3="", n2="", n1="",
+                matched_terms=[],
+                confidence=0.0,
+                source="Deferred to Batch LLM"
+            )
+        # Direct LLM call (only when use_llm_fallback=True, i.e. not in batch mode)
         llm_results = classify_items_with_llm([description], sector=sector, client_context=client_context, custom_hierarchy=hierarchy)
         if llm_results:
             llm_res = llm_results[0]

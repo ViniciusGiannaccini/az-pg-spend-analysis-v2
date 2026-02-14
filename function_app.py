@@ -21,44 +21,39 @@ POWER_AUTOMATE_URL = os.getenv("POWER_AUTOMATE_URL", "")
 POWER_AUTOMATE_API_KEY = os.getenv("POWER_AUTOMATE_API_KEY", "")
 
 
-# Models directory: Use /home/models in Azure (writable), ./models locally
-# Azure Functions has read-only /home/site/wwwroot, but /home is writable and persistent
+# Models directory:
+#   Azure: /mount/models (Azure File Share mounted at /mount)
+#   Local: ./models (relative to project root)
+# Override with MODELS_DIR_PATH env var if needed.
 def get_models_dir() -> str:
     """Get the appropriate models directory based on environment."""
-    # Check if running in Azure (WEBSITE_INSTANCE_ID is set in Azure App Service/Functions)
-    # AND explicitly ensure we're not just running 'func start' locally which might set some env vars.
-    # The most reliable way for Azure Function App Service is WEBSITE_INSTANCE_ID.
-    
-    # Force local if we detect macOS/Windows local environment explicitly or missing Azure ID
+    # Allow explicit override via environment variable
+    override = os.getenv("MODELS_DIR_PATH")
+    if override:
+        os.makedirs(override, exist_ok=True)
+        return override
+
     is_azure = os.getenv("WEBSITE_INSTANCE_ID") is not None
-    
+
     if is_azure:
-        azure_models = "/home/models"
+        azure_models = "/mount/models"
         try:
             os.makedirs(azure_models, exist_ok=True)
-            
-            # BOOTSTRAP: Initialize models from read-only package to writable /home
-            # Package location behavior: /home/site/wwwroot/models
-            package_models = os.path.join(os.getcwd(), "models") 
-            # Note: os.getcwd() usually returns /home/site/wwwroot in Azure Functions
-            
-            # Copy only if destination is empty (first run) or if we want to force update (logic can be refined)
-            # For now: Initialize if empty to ensure writable access
+
+            # BOOTSTRAP: Copy packaged models to writable mount on first run
+            package_models = os.path.join(os.getcwd(), "models")
             if os.path.exists(package_models) and not os.listdir(azure_models):
                 logging.info(f"[BOOTSTRAP] Initializing models from {package_models} to {azure_models}...")
                 shutil.copytree(package_models, azure_models, dirs_exist_ok=True)
                 logging.info("[BOOTSTRAP] Models copied successfully.")
             elif not os.path.exists(package_models):
-                 logging.warning(f"[BOOTSTRAP] Source models not found at {package_models}. Starting empty.")
+                logging.warning(f"[BOOTSTRAP] Source models not found at {package_models}. Starting empty.")
 
         except Exception as e:
             logging.error(f"[BOOTSTRAP] Error initializing models directory: {e}")
-            # Fallback will return azure_models anyway, but let's hope it works.
-            pass  
         return azure_models
-        
+
     # Local development
-    # Use absolute path to ensure we writing to the right place even if CWD changes
     return os.path.join(os.getcwd(), "models")
 
 MODELS_DIR = get_models_dir()

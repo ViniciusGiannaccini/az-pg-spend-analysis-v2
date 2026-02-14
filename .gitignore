@@ -1,17 +1,13 @@
 # ==== PYTHON / BACKEND ====
-# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
-
-# Virtual environments
 .venv/
 venv/
 ENV/
 env/
-
-# Pytest cache
 .pytest_cache/
+.python_packages/
 
 # Local settings (contains secrets)
 local.settings.json
@@ -28,25 +24,30 @@ dist/
 .env.*.local
 
 # ==== ML MODELS ====
-# Include model artifacts but exclude large training data
+# Include model artifacts but exclude large training data and versioned snapshots
 models/*/dataset_master.csv
 models/*/versions/
 
+# Runtime job data (created during processing, not source code)
+models/taxonomy_jobs/
+
 # ==== IDE / EDITOR ====
-.vscode
+.vscode/
 .idea/
 *.swp
 *.swo
 .DS_Store
 
-# ==== AZURE FUNCTIONS ====
-# Azurite local storage emulator
+# ==== AZURE / AZURITE ====
 __blobstorage__/
 __queuestorage__/
-__azurite_db*__.json
+__tablestorage__/
+__azurite_db*.json
+azurite_*
 
 # ==== LOGS ====
 *.log
+log.txt
 npm-debug.log*
 
 # ==== TEST ARTIFACTS ====
@@ -54,14 +55,8 @@ playwright-report/
 test-results/
 coverage/
 
-# ==== EXCEL FILES ====
+# ==== DATA FILES ====
 *.xlsx
 
-# ==== CACHE FILES ====
+# ==== CACHE ====
 /models/cache
-.python_packages
-
-# ==== RUNTIME DATA ====
-models/taxonomy_jobs/
-run_local_worker.pymodels/taxonomy_jobs/
-run_local_worker.py
