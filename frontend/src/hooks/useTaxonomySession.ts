@@ -281,6 +281,7 @@ export function useTaxonomySession(): UseTaxonomySessionReturn {
             alert(`Erro ao processar arquivo: ${error.message || 'Erro desconhecido'}`);
         } finally {
             setIsProcessing(false)
+            setProgress(null)
         }
     }
 

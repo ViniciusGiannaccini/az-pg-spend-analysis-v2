@@ -381,13 +381,22 @@ def GetTaxonomyJobStatus(req: func.HttpRequest) -> func.HttpResponse:
         # Calculate Progress
         total = status.get("total_chunks", 1)
         processed = status.get("processed_chunks", 0)
-        pct = int((processed / total) * 100)
-        
+        pct = min(int((processed / total) * 100), 99) if status["status"] != "COMPLETED" else 100
+
+        if status["status"] == "PROCESSING":
+            items_done = processed * 500  # chunk_size=500
+            items_total = total * 500
+            message = f"Classificando itens ({items_done:,}/{items_total:,})..."
+        elif status["status"] == "PENDING":
+            message = "Aguardando início do processamento..."
+        else:
+            message = status["status"]
+
         response = {
             "jobId": job_id,
             "status": status["status"],
             "progress_pct": pct,
-            "message": f"Processando parte {processed} de {total}..." if status["status"] == "PROCESSING" else ("PROCESSANDO" if status["status"] == "PENDING" else status["status"])
+            "message": message
         }
         
         if status["status"] == "COMPLETED":
@@ -521,22 +530,30 @@ def ProcessTaxonomyWorker(myTimer: func.TimerRequest) -> None:
                     # Save Result Chunk
                     with open(result_file, "w") as rf:
                         json.dump(results, rf)
-                        
+
                     chunk_processed_this_cycle = True
-                    # Update Progress in Status
-                    # Count actual results
-                    
-            # Update processed count accurately based on result files
+
+                    # Update progress in status.json after EACH chunk
+                    # so GetTaxonomyJobStatus can report real-time progress
+                    processed_so_far = sum(
+                        1 for j in range(total_chunks)
+                        if os.path.exists(os.path.join(job_dir, f"result_{j}.json"))
+                    )
+                    status["processed_chunks"] = processed_so_far
+                    with open(status_path, "w") as f:
+                        json.dump(status, f)
+
+            # Final accurate count + accumulate results for consolidation
             actual_processed = 0
             results_accumulated = []
-            
+
             for i in range(total_chunks):
                 res_path = os.path.join(job_dir, f"result_{i}.json")
                 if os.path.exists(res_path):
                     actual_processed += 1
                     with open(res_path, "r") as rf:
                         results_accumulated.extend(json.load(rf))
-                        
+
             status["processed_chunks"] = actual_processed
             
             # Check Completion

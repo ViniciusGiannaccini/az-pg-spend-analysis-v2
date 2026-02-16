@@ -154,7 +154,7 @@ export default function TaxonomyPage() {
 
                         {/* Title */}
                         <h3 className="text-2xl font-bold text-white mb-2 tracking-tight">
-                            {progress?.message ? "Analisando Dados..." : "Iniciando IA..."}
+                            {progress && progress.pct > 0 ? "Classificando Itens..." : progress?.message ? "Analisando Dados..." : "Iniciando IA..."}
                         </h3>
 
                         {/* Status Message */}
@@ -162,25 +162,25 @@ export default function TaxonomyPage() {
                             {progress?.message || "Preparando ambiente de processamento..."}
                         </p>
 
-                        {/* Progress Bar */}
-                        {progress && progress.pct > 0 && (
-                            <div className="w-full bg-white/10 rounded-full h-1.5 mb-2 overflow-hidden">
+                        {/* Progress Bar - always visible during processing */}
+                        <div className="w-full bg-white/10 rounded-full h-2 mb-3 overflow-hidden">
+                            {progress && progress.pct > 0 ? (
                                 <div
-                                    className="bg-gradient-to-r from-[#38bec9] to-primary-400 h-1.5 rounded-full transition-all duration-500 ease-out relative"
+                                    className="bg-gradient-to-r from-[#38bec9] to-[#14919b] h-2 rounded-full transition-all duration-1000 ease-out relative"
                                     style={{ width: `${progress.pct}%` }}
                                 >
-                                    <div className="absolute inset-0 bg-white/30 animate-pulse"></div>
+                                    <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
                                 </div>
-                            </div>
-                        )}
+                            ) : (
+                                <div className="h-2 rounded-full bg-gradient-to-r from-transparent via-[#38bec9]/40 to-transparent animate-[shimmer_2s_infinite] bg-[length:200%_100%]"></div>
+                            )}
+                        </div>
 
-                        {/* Percentage Text */}
-                        {progress && progress.pct > 0 && (
-                            <p className="text-xs font-mono text-[#38bec9] tracking-widest">{progress.pct}% CONCLUÍDO</p>
-                        )}
-
-                        {!progress && (
-                            <p className="text-xs text-white/40 animate-pulse mt-4">Conectando ao worker assíncrono...</p>
+                        {/* Percentage / Status Text */}
+                        {progress && progress.pct > 0 ? (
+                            <p className="text-sm font-mono text-[#38bec9] tracking-wider font-medium">{progress.pct}%</p>
+                        ) : (
+                            <p className="text-xs text-white/40 animate-pulse">Aguardando worker...</p>
                         )}
                     </div>
                 </div>
