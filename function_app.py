@@ -384,9 +384,9 @@ def GetTaxonomyJobStatus(req: func.HttpRequest) -> func.HttpResponse:
         pct = min(int((processed / total) * 100), 99) if status["status"] != "COMPLETED" else 100
 
         if status["status"] == "PROCESSING":
-            items_done = processed * 500  # chunk_size=500
-            items_total = total * 500
-            message = f"Classificando itens ({items_done:,}/{items_total:,})..."
+            total_rows = status.get("total_rows", total * 500)
+            items_done = min(processed * 500, total_rows)
+            message = f"{items_done:,} de {total_rows:,} itens processados"
         elif status["status"] == "PENDING":
             message = "Aguardando início do processamento..."
         else:
