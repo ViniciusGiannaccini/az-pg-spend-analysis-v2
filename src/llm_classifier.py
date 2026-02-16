@@ -62,7 +62,7 @@ def classify_items_with_llm(
     results = [None] * len(descriptions)
     
     # Process in larger batches (50 items) and use parallel threads
-    chunk_size = 2 # Aggressively small for grok-4 parallelization
+    chunk_size = 20 # Grok-4 handles 20 items per prompt well; reduces API calls 10x
     chunks = []
     for i in range(0, len(descriptions), chunk_size):
         chunks.append((i, descriptions[i:i + chunk_size]))
@@ -136,13 +136,17 @@ def _call_openai_api(
         '[{"item": "Tubo PVC 10mm", "N1": "MRO", "N2": "Materiais de Construção", "N3": "Produtos Sanitários", "N4": "Tubos", "confidence": 0.95}, ...]'
     )
     
-    # If hierarchy is present, append it to user message or system message
+    # If hierarchy is present, format as compact list (much fewer tokens than raw JSON)
     hierarchy_context = ""
     if custom_hierarchy:
-        # Just a small snippet or mention of hierarchy for the prompt
-        # In a real scenario, we might want to send the whole tree if it fits, or a summary
-        # For this implementation, we'll assume the hierarchy is passed as a reference
-        hierarchy_context = "\nUse a seguinte hierarquia como base:\n" + json.dumps(custom_hierarchy, ensure_ascii=False) # Full hierarchy passed
+        hierarchy_lines = []
+        for key, h in custom_hierarchy.items():
+            n1 = h.get('N1', '')
+            n2 = h.get('N2', '')
+            n3 = h.get('N3', '')
+            n4 = h.get('N4', key)
+            hierarchy_lines.append(f"- {n1} > {n2} > {n3} > {n4}")
+        hierarchy_context = f"\nCategorias disponíveis (N1 > N2 > N3 > N4):\n" + "\n".join(hierarchy_lines)
     
     user_content = f"Classifique os seguintes itens{hierarchy_context}:\n" + "\n".join([f"- {item}" for item in items])
 
@@ -312,7 +316,7 @@ def map_categories_with_llm(
     )
     
     mappings = {}
-    chunk_size = 2 # Very small for heavy models
+    chunk_size = 10 # 5x fewer API calls for semantic mapping
     
     # Process in parallel like the main classification
     chunk_items = []

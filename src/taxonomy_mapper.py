@@ -8,6 +8,7 @@ allowing them to override the standard taxonomy with their own.
 import pandas as pd
 import base64
 import io
+from difflib import get_close_matches
 from typing import Dict, List, Optional, Tuple
 
 
@@ -110,6 +111,9 @@ def apply_custom_hierarchy(
         except Exception:
             pass # Fall back to None if fuzzy matching fails
 
+    # No match found
+    return None, None
+
 
 def resolve_unmatched_with_llm(
     unmatched_n4s: List[str],
@@ -145,9 +149,6 @@ def resolve_unmatched_with_llm(
             normalized_map[k.lower().strip()] = v.lower().strip()
             
     return normalized_map
-
-    # No match found
-    return None, None
 
 
 def get_hierarchy_stats(custom_hierarchy: Dict[str, Dict]) -> Dict:

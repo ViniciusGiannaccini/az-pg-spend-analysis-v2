@@ -12,6 +12,7 @@ import csv
 import base64
 import os
 import shutil
+import time
 from datetime import datetime, timedelta
 import uuid
 import requests
@@ -33,7 +34,10 @@ def get_models_dir() -> str:
         os.makedirs(override, exist_ok=True)
         return override
 
-    is_azure = os.getenv("WEBSITE_INSTANCE_ID") is not None
+    # Detect Azure environment using multiple signals (Flex Consumption may not set all)
+    is_azure = any(os.getenv(v) for v in [
+        "WEBSITE_INSTANCE_ID", "WEBSITE_SITE_NAME", "FUNCTIONS_WORKER_RUNTIME"
+    ])
 
     if is_azure:
         azure_models = "/mount/models"
@@ -282,6 +286,7 @@ def SubmitTaxonomyJob(req: func.HttpRequest) -> func.HttpResponse:
     # Create Job Directory: {MODELS_DIR}/taxonomy_jobs/{session_id}/
     job_dir = os.path.join(MODELS_DIR, "taxonomy_jobs", session_id)
     os.makedirs(job_dir, exist_ok=True)
+    logging.info(f"[Submit] Job {session_id} created at {job_dir} (MODELS_DIR={MODELS_DIR})")
     
     try:
         # Decode and Load File
@@ -421,10 +426,16 @@ def ProcessTaxonomyWorker(myTimer: func.TimerRequest) -> None:
 
     jobs_root = os.path.join(MODELS_DIR, "taxonomy_jobs")
     if not os.path.exists(jobs_root):
+        logging.info(f"[Worker] No jobs directory at {jobs_root} (MODELS_DIR={MODELS_DIR})")
         return
 
+    job_ids = os.listdir(jobs_root)
+    if not job_ids:
+        return
+    logging.info(f"[Worker] Found {len(job_ids)} entries in {jobs_root}")
+
     # Iterate over active jobs
-    for job_id in os.listdir(jobs_root):
+    for job_id in job_ids:
         job_dir = os.path.join(jobs_root, job_id)
         status_path = os.path.join(job_dir, "status.json")
         
@@ -446,17 +457,25 @@ def ProcessTaxonomyWorker(myTimer: func.TimerRequest) -> None:
             # Find next unprocessed chunk
             total_chunks = status["total_chunks"]
             processed_count = 0
-            
-            # We process ALL available chunks for this job in one go (or limiting time loop if needed)
-            # ideally getting next chunk based on naming convention
-            
+
+            # Time budget: process as many chunks as possible within 20 min
+            # (safe margin inside Azure's 30 min timeout)
+            MAX_PROCESSING_TIME = 20 * 60  # 20 minutes in seconds
+            worker_start_time = time.time()
+
             # Simple approach: Check for chunk_X.json that DOES NOT have a result_X.json
             chunk_processed_this_cycle = False
-            
+
             for i in range(total_chunks):
+                # Check time budget before processing next chunk
+                elapsed = time.time() - worker_start_time
+                if elapsed > MAX_PROCESSING_TIME:
+                    logging.info(f"[Worker] Time budget atingido ({elapsed:.0f}s). Job {job_id} continuará no próximo ciclo.")
+                    break
+
                 chunk_file = os.path.join(job_dir, f"chunk_{i}.json")
                 result_file = os.path.join(job_dir, f"result_{i}.json")
-                
+
                 if os.path.exists(chunk_file) and not os.path.exists(result_file):
                     logging.info(f"Processing Job {job_id} - Chunk {i}/{total_chunks}")
                     
