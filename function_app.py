@@ -542,16 +542,34 @@ def ProcessTaxonomyWorker(myTimer: func.TimerRequest) -> None:
             # Check Completion
             if actual_processed == total_chunks:
                 logging.info(f"Job {job_id} Completed! Consolidating...")
-                
-                # Consolidate
-                final_df = pd.DataFrame(results_accumulated)
-                
+
+                # Consolidate classification results
+                results_df = pd.DataFrame(results_accumulated)
+
+                # Merge with original data (descriptions + other columns)
+                original_chunks = []
+                for i in range(total_chunks):
+                    chunk_path = os.path.join(job_dir, f"chunk_{i}.json")
+                    if os.path.exists(chunk_path):
+                        with open(chunk_path, "r") as cf:
+                            original_chunks.extend(json.load(cf))
+
+                if original_chunks and len(original_chunks) == len(results_accumulated):
+                    original_df = pd.DataFrame(original_chunks)
+                    # Drop internal columns that would conflict
+                    cols_to_drop = [c for c in original_df.columns if c.startswith('_')]
+                    original_df.drop(columns=cols_to_drop, errors='ignore', inplace=True)
+                    # Combine: original columns first, then classification columns
+                    final_df = pd.concat([original_df.reset_index(drop=True), results_df.reset_index(drop=True)], axis=1)
+                else:
+                    final_df = results_df
+
                 # Generate Analytics
                 analytics = generate_analytics(final_df)
-                
+
                 # Generate Summary using helper
                 summary = generate_summary(final_df, status.get("desc_column", "Descricao"))
-                
+
                 # Generate Excel
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:

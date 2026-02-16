@@ -123,7 +123,7 @@ export function useTaxonomySession(): UseTaxonomySessionReturn {
                 // Recreate blob URLs for download
                 const sessionsWithUrls = await Promise.all(storedSessions.map(async (session) => {
                     if (session.fileContentBase64) {
-                        const blob = await base64ToBlob(
+                        const blob = base64ToBlob(
                             session.fileContentBase64,
                             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
                         )
@@ -213,18 +213,24 @@ export function useTaxonomySession(): UseTaxonomySessionReturn {
         });
     };
 
-    // Helper function to convert base64 to Blob
-    const base64ToBlob = async (base64: string, contentType: string): Promise<Blob> => {
-        try {
-            if (!base64) return new Blob([], { type: contentType });
-            // Remove whitespace/newlines that might come from JSON or formatting
-            const cleanBase64 = base64.replace(/\s/g, '').split(',').pop() || '';
-            if (!cleanBase64) return new Blob([], { type: contentType });
+    // Helper function to convert base64 to Blob (using atob + Uint8Array for max compatibility)
+    const base64ToBlob = (base64: string, contentType: string): Blob => {
+        if (!base64) return new Blob([], { type: contentType });
+        const cleanBase64 = base64.replace(/\s/g, '').split(',').pop() || '';
+        if (!cleanBase64) return new Blob([], { type: contentType });
 
-            const dataUrl = `data:${contentType};base64,${cleanBase64}`;
-            const res = await fetch(dataUrl);
-            if (!res.ok) throw new Error("Fetch to DataURL failed");
-            return await res.blob();
+        try {
+            const byteCharacters = atob(cleanBase64);
+            const byteArrays: Uint8Array[] = [];
+            for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+                const slice = byteCharacters.slice(offset, offset + 512);
+                const byteNumbers = new Uint8Array(slice.length);
+                for (let i = 0; i < slice.length; i++) {
+                    byteNumbers[i] = slice.charCodeAt(i);
+                }
+                byteArrays.push(byteNumbers);
+            }
+            return new Blob(byteArrays, { type: contentType });
         } catch (error) {
             console.error("Base64 to Blob failed:", error);
             return new Blob([], { type: contentType });
@@ -265,7 +271,7 @@ export function useTaxonomySession(): UseTaxonomySessionReturn {
                 throw new Error("Resposta da API inválida ou SessionId ausente.");
             }
 
-            const xlsxBlob = await base64ToBlob(result.fileContent, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            const xlsxBlob = base64ToBlob(result.fileContent, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
             const downloadUrl = URL.createObjectURL(xlsxBlob)
 
             const newSession: TaxonomySession = {
@@ -352,13 +358,22 @@ export function useTaxonomySession(): UseTaxonomySessionReturn {
     }
 }
 
-// Exported helper (legacy, preferred to use the async one inside hook or similar)
-export const base64ToBlob = async (base64: string, contentType: string): Promise<Blob> => {
+// Exported helper (synchronous, using atob for max compatibility)
+export const base64ToBlobSync = (base64: string, contentType: string): Blob => {
     try {
         const cleanBase64 = base64.replace(/\s/g, '').split(',').pop() || '';
-        const dataUrl = `data:${contentType};base64,${cleanBase64}`;
-        const res = await fetch(dataUrl);
-        return await res.blob();
+        if (!cleanBase64) return new Blob([], { type: contentType });
+        const byteCharacters = atob(cleanBase64);
+        const byteArrays: Uint8Array[] = [];
+        for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+            const slice = byteCharacters.slice(offset, offset + 512);
+            const byteNumbers = new Uint8Array(slice.length);
+            for (let i = 0; i < slice.length; i++) {
+                byteNumbers[i] = slice.charCodeAt(i);
+            }
+            byteArrays.push(byteNumbers);
+        }
+        return new Blob(byteArrays, { type: contentType });
     } catch (e) {
         console.error("Exported base64ToBlob failed:", e);
         return new Blob([], { type: contentType });
