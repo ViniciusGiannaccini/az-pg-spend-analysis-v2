@@ -31,6 +31,10 @@ models/*/versions/
 # Runtime job data (created during processing, not source code)
 models/taxonomy_jobs/
 
+# ==== CLAUDE ====
+CLAUDE.md
+.claude/
+
 # ==== IDE / EDITOR ====
 .vscode/
 .idea/
