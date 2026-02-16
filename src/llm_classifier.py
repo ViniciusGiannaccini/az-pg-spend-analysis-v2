@@ -62,7 +62,7 @@ def classify_items_with_llm(
     results = [None] * len(descriptions)
     
     # Process in larger batches (50 items) and use parallel threads
-    chunk_size = 20 # Grok-4 handles 20 items per prompt well; reduces API calls 10x
+    chunk_size = 40 # Grok-4 handles 40 items per prompt; halves API calls vs 20
     chunks = []
     for i in range(0, len(descriptions), chunk_size):
         chunks.append((i, descriptions[i:i + chunk_size]))
@@ -316,7 +316,7 @@ def map_categories_with_llm(
     )
     
     mappings = {}
-    chunk_size = 10 # 5x fewer API calls for semantic mapping
+    chunk_size = 20 # 10x fewer API calls for semantic mapping
     
     # Process in parallel like the main classification
     chunk_items = []
