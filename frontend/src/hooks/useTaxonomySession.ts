@@ -120,23 +120,12 @@ export function useTaxonomySession(): UseTaxonomySessionReturn {
         const loadSessions = async () => {
             const storedSessions = await getAllSessions()
             if (storedSessions.length > 0) {
-                // Recreate blob URLs for download
-                const sessionsWithUrls = await Promise.all(storedSessions.map(async (session) => {
-                    if (session.fileContentBase64) {
-                        const blob = base64ToBlob(
-                            session.fileContentBase64,
-                            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                        )
-                        return { ...session, downloadUrl: URL.createObjectURL(blob) }
-                    }
-                    return session
-                }))
-                setSessions(sessionsWithUrls)
+                setSessions(storedSessions)
 
                 // Auto-select latest session if none is active
-                if (sessionsWithUrls.length > 0 && !activeSessionId) {
-                    console.log("[DEBUG] Auto-selecting latest session:", sessionsWithUrls[0].sessionId);
-                    setActiveSessionId(sessionsWithUrls[0].sessionId)
+                if (storedSessions.length > 0 && !activeSessionId) {
+                    console.log("[DEBUG] Auto-selecting latest session:", storedSessions[0].sessionId);
+                    setActiveSessionId(storedSessions[0].sessionId)
                 }
             }
         }
@@ -271,9 +260,6 @@ export function useTaxonomySession(): UseTaxonomySessionReturn {
                 throw new Error("Resposta da API inválida ou SessionId ausente.");
             }
 
-            const xlsxBlob = base64ToBlob(result.fileContent, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-            const downloadUrl = URL.createObjectURL(xlsxBlob)
-
             const newSession: TaxonomySession = {
                 filename: file.name,
                 sector: sector,
@@ -281,20 +267,15 @@ export function useTaxonomySession(): UseTaxonomySessionReturn {
                 summary: result.summary,
                 analytics: result.analytics,
                 items: result.items,
-                downloadUrl: downloadUrl,
                 downloadFilename: result.filenameDetail || result.filename || file.name,
+                fileContentBase64: result.fileContent,
                 timestamp: new Date().toISOString()
             }
 
             setSessions(prev => [newSession, ...prev])
             setActiveSessionId(result.sessionId)
 
-            const sessionToSave = {
-                ...newSession,
-                downloadUrl: undefined,
-                fileContentBase64: result.fileContent
-            }
-            await saveSession(sessionToSave)
+            await saveSession(newSession)
         } catch (error: any) {
             console.error("Erro no processamento da taxonomia:", error);
             alert(`Erro ao processar arquivo: ${error.message || 'Erro desconhecido'}`);

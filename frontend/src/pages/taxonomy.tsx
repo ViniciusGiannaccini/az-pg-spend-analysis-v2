@@ -333,7 +333,7 @@ export default function TaxonomyPage() {
                                                     <p className="text-xs font-bold text-orange-800">Diagnóstico de Dados</p>
                                                     <p className="text-[10px] text-orange-600">
                                                         Itens: {activeSession.summary?.total_linhas || 0} |
-                                                        Download: {activeSession.downloadUrl ? 'OK' : 'PENDENTE'} |
+                                                        Download: {activeSession.fileContentBase64 ? 'OK' : 'PENDENTE'} |
                                                         Copilot: {activeSession.analytics ? 'PRONTO' : 'ERRO'}
                                                     </p>
                                                 </div>
@@ -349,8 +349,8 @@ export default function TaxonomyPage() {
 
                                     {/* Messages Area */}
                                     <div ref={chatContainerRef} className="flex-1 overflow-y-auto space-y-6 mb-4 pr-2 min-h-0 p-6 floating-card bg-white rounded-3xl shadow-sm border border-gray-100">
-                                        {activeSession.downloadUrl && activeSession.downloadFilename && (
-                                            <DownloadCard downloadUrl={activeSession.downloadUrl} downloadFilename={activeSession.downloadFilename} />
+                                        {activeSession.fileContentBase64 && activeSession.downloadFilename && (
+                                            <DownloadCard fileContentBase64={activeSession.fileContentBase64} downloadFilename={activeSession.downloadFilename} />
                                         )}
 
                                         {copilotMessages.length > 0 ? (
