@@ -420,16 +420,223 @@ def GetTaxonomyJobStatus(req: func.HttpRequest) -> func.HttpResponse:
         return func.HttpResponse(f"Error reading status: {e}", status_code=500)
 
 
-# TIMER TRIGGER: Background Worker
-# Runs every 15 seconds to process chunks
-@app.schedule(schedule="*/15 * * * * *", arg_name="myTimer", run_on_startup=False,
-              use_monitor=False) 
-def ProcessTaxonomyWorker(myTimer: func.TimerRequest) -> None:
+# ---------------------------------------------------------------------------
+# WORKER HELPERS
+# ---------------------------------------------------------------------------
+
+def _cleanup_stale_jobs(jobs_root: str) -> None:
+    """Marca jobs PROCESSING há mais de 1 hora como ERROR (auto-limpeza)."""
+    STALE_THRESHOLD_SECONDS = 3600  # 1 hora
+    for job_id in os.listdir(jobs_root):
+        job_dir = os.path.join(jobs_root, job_id)
+        status_path = os.path.join(job_dir, "status.json")
+        if not os.path.isdir(job_dir) or not os.path.exists(status_path):
+            continue
+        try:
+            with open(status_path, "r") as f:
+                status = json.load(f)
+            if status.get("status") != "PROCESSING":
+                continue
+            created_at = status.get("created_at")
+            if not created_at:
+                continue
+            created_dt = datetime.fromisoformat(created_at)
+            elapsed = (datetime.utcnow() - created_dt).total_seconds()
+            if elapsed > STALE_THRESHOLD_SECONDS:
+                logging.warning(f"[Worker] Job {job_id} travado há {elapsed/60:.0f}min. Marcando como ERROR.")
+                status["status"] = "ERROR"
+                status["error"] = f"Job expirou após {elapsed/60:.0f} minutos sem completar"
+                with open(status_path, "w") as f:
+                    json.dump(status, f)
+        except Exception as e:
+            logging.error(f"[Worker] Erro ao verificar job travado {job_id}: {e}")
+
+
+def _get_active_jobs(jobs_root: str) -> list:
+    """Coleta jobs ativos (PENDING/PROCESSING) e marca PENDING como PROCESSING."""
+    active = []
+    for job_id in os.listdir(jobs_root):
+        job_dir = os.path.join(jobs_root, job_id)
+        status_path = os.path.join(job_dir, "status.json")
+        if not os.path.isdir(job_dir) or not os.path.exists(status_path):
+            continue
+        try:
+            with open(status_path, "r") as f:
+                status = json.load(f)
+            if status.get("status") in ["COMPLETED", "ERROR"]:
+                continue
+            if status["status"] == "PENDING":
+                status["status"] = "PROCESSING"
+                with open(status_path, "w") as f:
+                    json.dump(status, f)
+            active.append({
+                "job_id": job_id,
+                "job_dir": job_dir,
+                "status_path": status_path,
+                "status": status,
+                "total_chunks": status["total_chunks"],
+            })
+        except Exception as e:
+            logging.error(f"[Worker] Erro ao ler job {job_id}: {e}")
+    return active
+
+
+def _find_next_chunk(job_info: dict):
+    """Retorna o índice do próximo chunk não processado, ou None se todos prontos."""
+    job_dir = job_info["job_dir"]
+    for i in range(job_info["total_chunks"]):
+        chunk_file = os.path.join(job_dir, f"chunk_{i}.json")
+        result_file = os.path.join(job_dir, f"result_{i}.json")
+        if os.path.exists(chunk_file) and not os.path.exists(result_file):
+            return i
+    return None
+
+
+def _parse_custom_hierarchy(status: dict):
+    """Decodifica custom_hierarchy_b64 do status do job, se presente."""
     import pandas as pd
-    import base64
+    if not status.get("custom_hierarchy_b64"):
+        return None
+    try:
+        cust_bytes = base64.b64decode(status["custom_hierarchy_b64"])
+        df_hier = pd.read_excel(io.BytesIO(cust_bytes))
+        custom_hierarchy = {}
+        for _, row in df_hier.iterrows():
+            n4 = str(row.get('N4', '')).strip()
+            if n4:
+                custom_hierarchy[n4.lower()] = row.to_dict()
+        return custom_hierarchy
+    except Exception:
+        logging.error("Failed to parse custom hierarchy in worker")
+        return None
+
+
+def _process_single_chunk(job_info: dict, chunk_index: int) -> None:
+    """Processa um único chunk de um job e salva o resultado."""
+    import pandas as pd
     from src.core_classification import process_dataframe_chunk
+
+    job_dir = job_info["job_dir"]
+    status = job_info["status"]
+    job_id = job_info["job_id"]
+    total_chunks = job_info["total_chunks"]
+
+    chunk_file = os.path.join(job_dir, f"chunk_{chunk_index}.json")
+    result_file = os.path.join(job_dir, f"result_{chunk_index}.json")
+
+    logging.info(f"[Worker] Processing Job {job_id} - Chunk {chunk_index}/{total_chunks}")
+
+    df_chunk = pd.read_json(chunk_file, orient="records")
+
+    custom_hierarchy = _parse_custom_hierarchy(status)
+
+    results = process_dataframe_chunk(
+        df_chunk=df_chunk,
+        sector=status["sector"],
+        desc_column=status["desc_column"],
+        custom_hierarchy=custom_hierarchy,
+        client_context=status.get("client_context", "")
+    )
+
+    with open(result_file, "w") as rf:
+        json.dump(results, rf)
+
+    # Atualizar progresso no status.json
+    processed_so_far = sum(
+        1 for j in range(total_chunks)
+        if os.path.exists(os.path.join(job_dir, f"result_{j}.json"))
+    )
+    status["processed_chunks"] = processed_so_far
+    with open(job_info["status_path"], "w") as f:
+        json.dump(status, f)
+
+
+def _consolidate_job(job_info: dict) -> None:
+    """Consolida resultados de todos os chunks em Excel final e marca COMPLETED."""
+    import pandas as pd
     from src.taxonomy_engine import generate_analytics, generate_summary
-    
+    import glob as glob_mod
+
+    job_dir = job_info["job_dir"]
+    status = job_info["status"]
+    job_id = job_info["job_id"]
+    total_chunks = job_info["total_chunks"]
+    status_path = job_info["status_path"]
+
+    logging.info(f"[Worker] Job {job_id} Completed! Consolidating...")
+
+    # Acumular resultados de classificação
+    results_accumulated = []
+    for i in range(total_chunks):
+        res_path = os.path.join(job_dir, f"result_{i}.json")
+        if os.path.exists(res_path):
+            with open(res_path, "r") as rf:
+                results_accumulated.extend(json.load(rf))
+
+    results_df = pd.DataFrame(results_accumulated)
+
+    # Unir com dados originais (descrições + outras colunas)
+    original_chunks = []
+    for i in range(total_chunks):
+        chunk_path = os.path.join(job_dir, f"chunk_{i}.json")
+        if os.path.exists(chunk_path):
+            with open(chunk_path, "r") as cf:
+                original_chunks.extend(json.load(cf))
+
+    if original_chunks and len(original_chunks) == len(results_accumulated):
+        original_df = pd.DataFrame(original_chunks)
+        cols_to_drop = [c for c in original_df.columns if c.startswith('_')]
+        original_df.drop(columns=cols_to_drop, errors='ignore', inplace=True)
+        final_df = pd.concat([original_df.reset_index(drop=True), results_df.reset_index(drop=True)], axis=1)
+    else:
+        final_df = results_df
+
+    # Analytics e Summary
+    analytics = generate_analytics(final_df)
+    summary = generate_summary(final_df, status.get("desc_column", "Descricao"))
+
+    # Gerar Excel
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        final_df.to_excel(writer, index=False, sheet_name='Classificação')
+    output.seek(0)
+    xlsx_b64 = base64.b64encode(output.getvalue()).decode("utf-8")
+
+    final_result = {
+        "items": final_df.to_dict(orient="records"),
+        "analytics": analytics,
+        "summary": summary,
+        "fileContent": xlsx_b64,
+        "filename": f"classified_{status['filename']}"
+    }
+
+    with open(os.path.join(job_dir, "result.json"), "w") as f:
+        json.dump(final_result, f)
+
+    status["status"] = "COMPLETED"
+    with open(status_path, "w") as f:
+        json.dump(status, f)
+
+    # Limpar chunks e resultados intermediários
+    for chunk_file in glob_mod.glob(os.path.join(job_dir, "chunk_*.json")):
+        try:
+            os.remove(chunk_file)
+        except OSError:
+            pass
+    for res_chunk in glob_mod.glob(os.path.join(job_dir, "result_*.json")):
+        try:
+            os.remove(res_chunk)
+        except OSError:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# TIMER TRIGGER: Background Worker (Round-Robin entre jobs)
+# Runs every 15 seconds to process chunks
+# ---------------------------------------------------------------------------
+@app.schedule(schedule="*/15 * * * * *", arg_name="myTimer", run_on_startup=False,
+              use_monitor=False)
+def ProcessTaxonomyWorker(myTimer: func.TimerRequest) -> None:
     if myTimer.past_due:
         logging.info('The timer is past due!')
 
@@ -438,196 +645,64 @@ def ProcessTaxonomyWorker(myTimer: func.TimerRequest) -> None:
         logging.info(f"[Worker] No jobs directory at {jobs_root} (MODELS_DIR={MODELS_DIR})")
         return
 
-    job_ids = os.listdir(jobs_root)
-    if not job_ids:
+    # 1. Auto-limpeza de jobs travados (PROCESSING > 1h → ERROR)
+    _cleanup_stale_jobs(jobs_root)
+
+    # 2. Coletar jobs ativos (PENDING → PROCESSING)
+    active_jobs = _get_active_jobs(jobs_root)
+    if not active_jobs:
         return
-    logging.info(f"[Worker] Found {len(job_ids)} entries in {jobs_root}")
 
-    # Iterate over active jobs
-    for job_id in job_ids:
-        job_dir = os.path.join(jobs_root, job_id)
-        status_path = os.path.join(job_dir, "status.json")
-        
-        if not os.path.isdir(job_dir) or not os.path.exists(status_path):
+    logging.info(f"[Worker] {len(active_jobs)} job(s) ativo(s): {[j['job_id'][:8] for j in active_jobs]}")
+
+    # 3. Round-robin: processar 1 chunk por job, ciclando até time budget esgotar
+    MAX_PROCESSING_TIME = 20 * 60  # 20 minutos
+    worker_start_time = time.time()
+    made_progress = True
+
+    while made_progress:
+        made_progress = False
+        for job_info in active_jobs:
+            # Verificar time budget antes de cada chunk
+            elapsed = time.time() - worker_start_time
+            if elapsed > MAX_PROCESSING_TIME:
+                logging.info(f"[Worker] Time budget atingido ({elapsed:.0f}s). Jobs continuam no próximo ciclo.")
+                made_progress = False
+                break
+
+            # Pular jobs que já falharam neste ciclo
+            if job_info["status"].get("status") == "ERROR":
+                continue
+
+            next_chunk = _find_next_chunk(job_info)
+            if next_chunk is not None:
+                try:
+                    _process_single_chunk(job_info, next_chunk)
+                    made_progress = True
+                except Exception as e:
+                    logging.error(f"[Worker] Erro no Job {job_info['job_id']} chunk {next_chunk}: {e}")
+                    job_info["status"]["status"] = "ERROR"
+                    job_info["status"]["error"] = str(e)
+                    with open(job_info["status_path"], "w") as f:
+                        json.dump(job_info["status"], f)
+
+    # 4. Consolidar jobs que completaram todos os chunks
+    for job_info in active_jobs:
+        if job_info["status"].get("status") == "ERROR":
             continue
-            
-        try:
-            with open(status_path, "r") as f:
-                status = json.load(f)
-            
-            if status["status"] in ["COMPLETED", "ERROR"]:
-                continue # Skip finished jobs
-                
-            # Update status to PROCESSING if PENDING
-            if status["status"] == "PENDING":
-                status["status"] = "PROCESSING"
-                with open(status_path, "w") as f: json.dump(status, f)
-
-            # Find next unprocessed chunk
-            total_chunks = status["total_chunks"]
-            processed_count = 0
-
-            # Time budget: process as many chunks as possible within 20 min
-            # (safe margin inside Azure's 30 min timeout)
-            MAX_PROCESSING_TIME = 20 * 60  # 20 minutes in seconds
-            worker_start_time = time.time()
-
-            # Simple approach: Check for chunk_X.json that DOES NOT have a result_X.json
-            chunk_processed_this_cycle = False
-
-            for i in range(total_chunks):
-                # Check time budget before processing next chunk
-                elapsed = time.time() - worker_start_time
-                if elapsed > MAX_PROCESSING_TIME:
-                    logging.info(f"[Worker] Time budget atingido ({elapsed:.0f}s). Job {job_id} continuará no próximo ciclo.")
-                    break
-
-                chunk_file = os.path.join(job_dir, f"chunk_{i}.json")
-                result_file = os.path.join(job_dir, f"result_{i}.json")
-
-                if os.path.exists(chunk_file) and not os.path.exists(result_file):
-                    logging.info(f"Processing Job {job_id} - Chunk {i}/{total_chunks}")
-                    
-                    # Load Chunk
-                    df_chunk = pd.read_json(chunk_file, orient="records")
-                    
-                    # Process Chunk using Core Logic
-                    # We need to construct hierarchy dicts if custom/dict provided
-                    custom_hierarchy = None
-                    if status.get("custom_hierarchy_b64"):
-                        # Decode custom hierarchy logic needed here or reuse helper?
-                        # For simplicity, let's assume core logic handles it if passed
-                        # Re-implement decoding briefly here or ensure core can take b64?
-                        # core takes Dictionary object. Need to decode.
-                        import base64
-                        try:
-                           cust_bytes = base64.b64decode(status["custom_hierarchy_b64"])
-                           # This needs careful parsing like in original function.
-                           # Simplified: we assume it works or we should have pre-parsed it.
-                           # Let's decode it on the fly.
-                           df_hier = pd.read_excel(io.BytesIO(cust_bytes))
-                           # Helper to convert df to dict hierarchy
-                           from src.taxonomy_mapper import load_custom_hierarchy
-                           # We need to mock the file path or change load_custom_hierarchy to accept DF
-                           # Actually apply_custom_hierarchy takes a dict.
-                           # Let's rebuild dict manually or refactor helper.
-                           # Refactor is risky. Let's do a simple parsing here.
-                           custom_hierarchy = {}
-                           for _, row in df_hier.iterrows():
-                                n4 = str(row.get('N4', '')).strip()
-                                if n4: custom_hierarchy[n4.lower()] = row.to_dict()
-                        except:
-                            logging.error("Failed to parse custom hierarchy in worker")
-
-                    results = process_dataframe_chunk(
-                        df_chunk=df_chunk,
-                        sector=status["sector"],
-                        desc_column=status["desc_column"],
-                        custom_hierarchy=custom_hierarchy,
-                        client_context=status.get("client_context", "")
-                    )
-                    
-                    # Save Result Chunk
-                    with open(result_file, "w") as rf:
-                        json.dump(results, rf)
-
-                    chunk_processed_this_cycle = True
-
-                    # Update progress in status.json after EACH chunk
-                    # so GetTaxonomyJobStatus can report real-time progress
-                    processed_so_far = sum(
-                        1 for j in range(total_chunks)
-                        if os.path.exists(os.path.join(job_dir, f"result_{j}.json"))
-                    )
-                    status["processed_chunks"] = processed_so_far
-                    with open(status_path, "w") as f:
-                        json.dump(status, f)
-
-            # Final accurate count + accumulate results for consolidation
-            actual_processed = 0
-            results_accumulated = []
-
-            for i in range(total_chunks):
-                res_path = os.path.join(job_dir, f"result_{i}.json")
-                if os.path.exists(res_path):
-                    actual_processed += 1
-                    with open(res_path, "r") as rf:
-                        results_accumulated.extend(json.load(rf))
-
-            status["processed_chunks"] = actual_processed
-            
-            # Check Completion
-            if actual_processed == total_chunks:
-                logging.info(f"Job {job_id} Completed! Consolidating...")
-
-                # Consolidate classification results
-                results_df = pd.DataFrame(results_accumulated)
-
-                # Merge with original data (descriptions + other columns)
-                original_chunks = []
-                for i in range(total_chunks):
-                    chunk_path = os.path.join(job_dir, f"chunk_{i}.json")
-                    if os.path.exists(chunk_path):
-                        with open(chunk_path, "r") as cf:
-                            original_chunks.extend(json.load(cf))
-
-                if original_chunks and len(original_chunks) == len(results_accumulated):
-                    original_df = pd.DataFrame(original_chunks)
-                    # Drop internal columns that would conflict
-                    cols_to_drop = [c for c in original_df.columns if c.startswith('_')]
-                    original_df.drop(columns=cols_to_drop, errors='ignore', inplace=True)
-                    # Combine: original columns first, then classification columns
-                    final_df = pd.concat([original_df.reset_index(drop=True), results_df.reset_index(drop=True)], axis=1)
-                else:
-                    final_df = results_df
-
-                # Generate Analytics
-                analytics = generate_analytics(final_df)
-
-                # Generate Summary using helper
-                summary = generate_summary(final_df, status.get("desc_column", "Descricao"))
-
-                # Generate Excel
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    final_df.to_excel(writer, index=False, sheet_name='Classificação')
-                    
-                output.seek(0)
-                xlsx_b64 = base64.b64encode(output.getvalue()).decode("utf-8")
-                
-                final_result = {
-                    "items": final_df.to_dict(orient="records"), # Full items for RAG
-                    "analytics": analytics, # Full analytics
-                    "summary": summary, # Summary stats
-                    "fileContent": xlsx_b64,
-                    "filename": f"classified_{status['filename']}"
-                }
-                
-                with open(os.path.join(job_dir, "result.json"), "w") as f:
-                    json.dump(final_result, f)
-                    
-                status["status"] = "COMPLETED"
-
-                # Cleanup Chunks & Intermediate Results (only after successful consolidation)
-                import glob
-                for chunk_file in glob.glob(os.path.join(job_dir, "chunk_*.json")):
-                    try:
-                        os.remove(chunk_file)
-                    except OSError: pass
-                for res_chunk in glob.glob(os.path.join(job_dir, "result_*.json")):
-                    try:
-                        os.remove(res_chunk)
-                    except OSError: pass
-
-            # Save Status Update
-            with open(status_path, "w") as f:
-                json.dump(status, f)
-                
-        except Exception as e:
-            logging.error(f"Worker Error on Job {job_id}: {e}")
-            status["status"] = "ERROR"
-            status["error"] = str(e)
-            with open(status_path, "w") as f: json.dump(status, f)
+        all_done = all(
+            os.path.exists(os.path.join(job_info["job_dir"], f"result_{i}.json"))
+            for i in range(job_info["total_chunks"])
+        )
+        if all_done:
+            try:
+                _consolidate_job(job_info)
+            except Exception as e:
+                logging.error(f"[Worker] Erro ao consolidar Job {job_info['job_id']}: {e}")
+                job_info["status"]["status"] = "ERROR"
+                job_info["status"]["error"] = f"Consolidation error: {e}"
+                with open(job_info["status_path"], "w") as f:
+                    json.dump(job_info["status"], f)
 
 # ---------------------------------------------------------------------------
 
