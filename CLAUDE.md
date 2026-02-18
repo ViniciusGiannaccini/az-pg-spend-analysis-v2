@@ -38,7 +38,12 @@ Descricao do item
      -> Multiplos matches: "Ambiguo"
      -> Sem match: "Nenhum"
   -> Passo 3: LLM Fallback (Grok) para itens "Nenhum" (batch async, 20 workers)
-  -> Passo 4: Semantic Mapping para hierarquia customizada do cliente (se fornecida)
+     -> Com hierarquia customizada: prompt inclui arvore compacta (N1>N2>N3>[N4s]) + restricao obrigatoria
+     -> Hierarquia no system message (fixo entre chamadas), itens no user message
+  -> Passo 4: Validacao local contra hierarquia customizada (sem LLM adicional)
+     -> Exact match (case-insensitive) na hierarquia → aplica
+     -> Fuzzy match (difflib, cutoff=0.6) → aplica
+     -> Sem match → marca como "Nenhum"
   -> Resultado: {N1, N2, N3, N4, status, source, confidence, matched_terms}
 ```
 
@@ -161,10 +166,15 @@ JOB_TIMEOUT_MINUTES = 20          # Budget interno do worker (round-robin)
 STALE_JOB_THRESHOLD = 3600        # 1 hora - jobs PROCESSING alem disso viram ERROR
 
 # LLM (llm_classifier.py)
-LLM_BATCH_SIZE = 20               # Itens por chamada ao Grok
+LLM_BATCH_SIZE = 40               # Itens por chamada ao Grok
 LLM_CONCURRENT_WORKERS = 20       # Threads paralelas
 LLM_TIMEOUT_SECONDS = 90          # Timeout por chamada
 LLM_MAX_RETRIES = 2               # Retries com backoff exponencial
+
+# Hierarquia customizada (llm_classifier.py + core_classification.py)
+HIERARCHY_FORMAT = "compact_tree"  # Formato arvore agrupado (N1>N2>N3>[N4s]) - ~60-70% menos tokens
+HIERARCHY_FUZZY_CUTOFF = 0.6      # Cutoff para fuzzy match (difflib) no Pass 4
+PASS3_LLM_SEMANTIC_MAP = False    # Pass 3 agora usa validacao local (sem LLM adicional)
 ```
 
 ---
@@ -250,7 +260,7 @@ npm run dev   # Next.js em http://localhost:3000
 ### Nomenclatura
 - Niveis taxonomicos: N1 (mais alto) -> N4 (mais granular)
 - Status de classificacao: "Unico", "Ambiguo", "Nenhum"
-- Fontes de classificacao: "ML", "Dictionary", "LLM", "None"
+- Fontes de classificacao: "ML", "Dictionary", "LLM", "LLM (Batch)", "Custom (via ...)", "Custom/fuzzy (via ...)", "None"
 - Setores: lowercase (ex: "varejo", "educacional")
 
 ---
@@ -277,7 +287,9 @@ npm run dev   # Next.js em http://localhost:3000
 - **normalize_text()** e usado em treinamento E predicao - alteracoes DEVEM ser aplicadas em ambos os fluxos senao os modelos quebram
 - **Artefatos ML** (.pkl) sao acoplados a versao do scikit-learn - nao atualizar scikit-learn sem retreinar modelos
 - **Spend_Taxonomy.xlsx** e o dicionario master - alteracoes afetam a classificacao por dicionario imediatamente
-- **Prompts do Grok** em `llm_classifier.py` afetam qualidade da classificacao LLM - versionar alteracoes
+- **Prompts do Grok** em `llm_classifier.py` afetam qualidade da classificacao LLM - versionar alteracoes. Quando `custom_hierarchy` presente, hierarquia vai no system message (formato arvore compacto via `_format_hierarchy_compact()`) com restricao obrigatoria de usar APENAS categorias da arvore
+- **Pass 4 (Validacao hierarquia)** em `core_classification.py` NAO usa LLM — apenas exact match + fuzzy match local (`difflib.get_close_matches`, cutoff=0.6). O cache de fuzzy e local por chunk. Se precisar ajustar cutoff, alterar em `core_classification.py` linha ~139
+- **Hierarquia customizada no worker**: parseada UMA VEZ por job em `_get_active_jobs()` e armazenada em `job_info["custom_hierarchy"]`. NAO parsear novamente em `_process_single_chunk()`
 - **IndexedDB** no frontend armazena sessoes completas incluindo dados classificados - cuidado com o volume
 - **Download de arquivos** no frontend: NUNCA usar blob URLs pre-criados (`URL.createObjectURL`) para download — eles se tornam invalidos (GC, refresh, ciclo de vida do browser). SEMPRE converter base64→Blob **no momento do clique** com `atob()` + `Uint8Array` + anchor programatico (`link.click()`). O `DownloadCard` recebe `fileContentBase64` diretamente, NAO um blob URL
 - **Consolidacao do worker** (`function_app.py`): ao gerar Excel de download, DEVE unir dados originais (chunk_X.json) com resultados de classificacao (result_X.json). Sem isso, o Excel sai sem descricoes
@@ -343,3 +355,4 @@ az functionapp restart --name az-pg-spend-analysis-ai-agent \
 | 2026-02-16 | Download Excel 0KB (v2) | Blob URLs pre-criados (`URL.createObjectURL`) se tornavam invalidos antes do clique do usuario | Removido blob URLs; download agora converte base64→Blob sob demanda no clique com anchor programatico |
 | 2026-02-16 | Excel download sem descricoes | Consolidacao so incluia colunas de classificacao | Worker agora une chunk_X.json (original) com result_X.json |
 | 2026-02-16 | Job novo fica PENDING com jobs simultaneos | Worker sequencial processava todos os chunks de um job antes de passar ao proximo | Refactor para round-robin: 1 chunk por job ciclicamente + auto-limpeza de jobs travados >1h |
+| 2026-02-18 | Job com hierarquia customizada ~50min (vs ~15min sem) | Prompt LLM incluia 276 categorias em formato linear (~5500 tokens) + Pass 3 fazia chamadas LLM extras (semantic mapping) sem cache entre chunks | Hierarquia compacta (arvore agrupada, ~1800 tokens) + prompt restritivo + Pass 3 local (exact+fuzzy match sem LLM) + parse hierarquia 1x por job |
