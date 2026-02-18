@@ -515,21 +515,53 @@ def _find_next_chunks(job_info: dict, max_count: int = 1, exclude: set = None) -
 
 
 def _parse_custom_hierarchy(status: dict):
-    """Decodifica custom_hierarchy_b64 do status do job, se presente."""
+    """Decodifica custom_hierarchy_b64 do status do job, se presente.
+    Robusto: detecta a linha de headers (N1,N2,N3,N4) mesmo com linhas vazias antes."""
     import pandas as pd
     if not status.get("custom_hierarchy_b64"):
         return None
     try:
         cust_bytes = base64.b64decode(status["custom_hierarchy_b64"])
-        df_hier = pd.read_excel(io.BytesIO(cust_bytes))
+
+        # 1. Ler sem assumir posição dos headers
+        df_raw = pd.read_excel(io.BytesIO(cust_bytes), header=None)
+
+        # 2. Encontrar a linha que contém N1, N2, N3, N4
+        header_row = None
+        for idx, row in df_raw.iterrows():
+            values = [str(v).strip().upper() for v in row.values]
+            if 'N1' in values and 'N4' in values:
+                header_row = idx
+                break
+
+        if header_row is None:
+            logging.error("Custom hierarchy: headers N1/N4 não encontrados no arquivo")
+            return None
+
+        # 3. Re-ler com o header correto
+        df_hier = pd.read_excel(io.BytesIO(cust_bytes), header=header_row)
+        df_hier.columns = [str(c).strip().upper() for c in df_hier.columns]
+
+        if 'N4' not in df_hier.columns:
+            logging.error(f"Custom hierarchy: coluna N4 ausente. Colunas: {list(df_hier.columns)}")
+            return None
+
+        # 4. Construir hierarquia com chaves padronizadas (N1, N2, N3, N4)
         custom_hierarchy = {}
         for _, row in df_hier.iterrows():
             n4 = str(row.get('N4', '')).strip()
-            if n4:
-                custom_hierarchy[n4.lower()] = row.to_dict()
-        return custom_hierarchy
-    except Exception:
-        logging.error("Failed to parse custom hierarchy in worker")
+            if n4 and n4.upper() != 'NAN':
+                custom_hierarchy[n4.lower()] = {
+                    'N1': str(row.get('N1', '')).strip() if pd.notna(row.get('N1')) else '',
+                    'N2': str(row.get('N2', '')).strip() if pd.notna(row.get('N2')) else '',
+                    'N3': str(row.get('N3', '')).strip() if pd.notna(row.get('N3')) else '',
+                    'N4': n4,
+                }
+
+        logging.info(f"Custom hierarchy parsed: {len(custom_hierarchy)} N4 categories")
+        return custom_hierarchy if custom_hierarchy else None
+    except Exception as e:
+        logging.error(f"Failed to parse custom hierarchy: {e}")
         return None
 
 
