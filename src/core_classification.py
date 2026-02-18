@@ -1,5 +1,6 @@
 
 import logging
+import unicodedata
 import pandas as pd
 from typing import Dict, List, Optional, Tuple, Any
 from difflib import get_close_matches
@@ -7,6 +8,45 @@ import json
 import base64
 import io
 import time
+
+
+def _normalize_for_match(text: str) -> str:
+    """Remove acentos e normaliza para matching robusto."""
+    nfkd = unicodedata.normalize('NFKD', text.lower().strip())
+    return ''.join(c for c in nfkd if not unicodedata.combining(c))
+
+
+def _best_hierarchy_match(n4_text: str, hierarchy_keys: list, norm_keys_map: dict) -> str | None:
+    """
+    Tenta casar n4_text contra hierarchy_keys usando múltiplas estratégias:
+    1. Exact match (case-insensitive)
+    2. Exact match normalizado (sem acentos)
+    3. Fuzzy match (difflib, cutoff=0.55)
+    4. Substring match (n4 contido em key ou vice-versa, min 5 chars)
+    """
+    key = n4_text.lower().strip()
+    norm = _normalize_for_match(n4_text)
+
+    # 1. Exact
+    if key in hierarchy_keys:
+        return key
+
+    # 2. Normalized exact (sem acentos)
+    if norm in norm_keys_map:
+        return norm_keys_map[norm]
+
+    # 3. Fuzzy (difflib)
+    matches = get_close_matches(key, hierarchy_keys, n=1, cutoff=0.55)
+    if matches:
+        return matches[0]
+
+    # 4. Substring match (min 5 chars para evitar falsos positivos)
+    if len(norm) >= 5:
+        for hk, orig_key in norm_keys_map.items():
+            if len(hk) >= 5 and (norm in hk or hk in norm):
+                return orig_key
+
+    return None
 
 # Import your existing classifiers
 from src.ml_classifier import load_model_for_sector, predict_batch
@@ -84,11 +124,14 @@ def process_dataframe_chunk(
             unclassified_descs = [chunk_results[i]["_desc_original"] for i in unclassified_indices]
             
             try:
+                # NÃO enviar hierarquia customizada ao LLM — o modelo reasoning
+                # fica ~4x mais lento com hierarquia no prompt (276 categorias).
+                # O LLM classifica livremente e o Pass 4 mapeia localmente (exact+fuzzy).
                 llm_batch_results = classify_items_with_llm(
                     unclassified_descs,
                     sector=sector,
                     client_context=client_context,
-                    custom_hierarchy=effective_hierarchy
+                    custom_hierarchy=None
                 )
                 
                 # Merge results (skip LLM failures that return "Não Identificado")
@@ -108,59 +151,49 @@ def process_dataframe_chunk(
             except Exception as e:
                 logging.error(f"[Chunk] LLM batch failed: {e}")
 
-        # 4. Third Pass: Validação local contra hierarquia customizada (sem LLM)
-        # O prompt restritivo na Opt 2 garante que o LLM já retorna N4s da hierarquia.
-        # Aqui apenas validamos: exact match → fuzzy match → Nenhum.
+        # 4. Pass 4: Mapeamento local contra hierarquia customizada (sem LLM)
+        # O LLM classifica livremente (rápido, sem hierarquia no prompt).
+        # Aqui mapeamos os N4s retornados para a hierarquia do cliente via
+        # exact match → normalized match → fuzzy match → substring match.
         if custom_hierarchy:
             hierarchy_keys = list(custom_hierarchy.keys())  # lowercase keys
-            # Cache local de fuzzy matches para não recalcular
-            fuzzy_cache = {}
+            # Mapa de keys normalizados (sem acentos) → key original
+            norm_keys_map = {_normalize_for_match(k): k for k in hierarchy_keys}
+            # Cache de matching para não recalcular N4s repetidos
+            match_cache = {}
 
             for res in chunk_results:
                 if res['status'] != 'Único' or not res.get('N4'):
                     continue
 
-                n4_key = res['N4'].lower().strip()
+                n4_val = res['N4']
+                cache_key = n4_val.lower().strip()
 
-                # 4a. Exact match na hierarquia
-                if n4_key in custom_hierarchy:
-                    h = custom_hierarchy[n4_key]
-                    res.update({
-                        "N1": h.get('N1', ''),
-                        "N2": h.get('N2', ''),
-                        "N3": h.get('N3', ''),
-                        "N4": h.get('N4', res['N4']),
-                        "classification_source": f"Custom (via {res.get('classification_source', '')})"
-                    })
-                    continue
+                if cache_key not in match_cache:
+                    match_cache[cache_key] = _best_hierarchy_match(n4_val, hierarchy_keys, norm_keys_map)
 
-                # 4b. Fuzzy match (difflib, cutoff=0.6)
-                if n4_key not in fuzzy_cache:
-                    matches = get_close_matches(n4_key, hierarchy_keys, n=1, cutoff=0.6)
-                    fuzzy_cache[n4_key] = matches[0] if matches else None
-
-                matched_key = fuzzy_cache[n4_key]
+                matched_key = match_cache[cache_key]
                 if matched_key:
                     h = custom_hierarchy[matched_key]
+                    source = "Custom" if matched_key == cache_key else "Custom/fuzzy"
                     res.update({
                         "N1": h.get('N1', ''),
                         "N2": h.get('N2', ''),
                         "N3": h.get('N3', ''),
-                        "N4": h.get('N4', ''),
-                        "classification_source": f"Custom/fuzzy (via {res.get('classification_source', '')})"
+                        "N4": h.get('N4', n4_val),
+                        "classification_source": f"{source} (via {res.get('classification_source', '')})"
                     })
                 else:
                     # Sem match — marca como Nenhum
-                    orig_n4 = res.get('N4', '')
                     res.update({
                         "N1": "", "N2": "", "N3": "", "N4": "",
                         "status": "Nenhum",
-                        "matched_terms": [f'Standard: {orig_n4}'] if orig_n4 else []
+                        "matched_terms": [f'Standard: {n4_val}'] if n4_val else []
                     })
 
             matched = sum(1 for r in chunk_results if r['status'] == 'Único' and r.get('classification_source', '').startswith('Custom'))
-            total_unique = sum(1 for r in chunk_results if r['status'] == 'Único' or (r.get('matched_terms') and 'Standard:' in str(r.get('matched_terms', ''))))
-            logging.info(f"[Chunk] Hierarchy validation: {matched}/{total_unique} mapped (fuzzy cache: {len(fuzzy_cache)} entries)")
+            unmatched = sum(1 for r in chunk_results if r.get('matched_terms') and 'Standard:' in str(r.get('matched_terms', '')))
+            logging.info(f"[Chunk] Hierarchy mapping: {matched} mapped, {unmatched} unmatched (cache: {len(match_cache)} unique N4s)")
 
     # Cleanup temporary fields
     for res in chunk_results:
