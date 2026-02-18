@@ -7,7 +7,7 @@ import os
 import json
 import logging
 import requests
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -23,25 +23,32 @@ Exemplos:
 - "Consultoria Financeira" -> N1: "Serviços Financeiros", N2: "Consultoria"
 """
 
-def _format_hierarchy_compact(custom_hierarchy: Dict) -> str:
+def _format_hierarchy_compact(custom_hierarchy) -> str:
     """
     Formata hierarquia customizada em formato árvore compacto.
     Reduz ~60-70% dos tokens comparado com o formato linear (N1 > N2 > N3 > N4).
+    Aceita lista de dicts ou dict keyed por N4 (backward compat).
 
-    Input: {"tubos pvc": {"N1": "MRO", "N2": "Mat. Construção", "N3": "Prod. Sanitários", "N4": "Tubos PVC"}, ...}
     Output:
-        MRO:
-          Mat. Construção:
-            Prod. Sanitários: [Tubos PVC, Conexões]
-            Ferramentas: [Chaves]
+        Operação e Manutenção:
+          Materiais e Serviços OEM:
+            OEM - ABB: [Materiais OEM, Serviços OEM]
+            OEM - SIEMENS: [Materiais OEM, Serviços OEM]
     """
+    # Aceitar lista ou dict (backward compat)
+    if isinstance(custom_hierarchy, dict):
+        entries = custom_hierarchy.values()
+    else:
+        entries = custom_hierarchy
+
     tree = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
-    for key, h in custom_hierarchy.items():
+    for h in entries:
         n1 = h.get('N1', '') or 'Outros'
         n2 = h.get('N2', '') or 'Outros'
         n3 = h.get('N3', '') or 'Outros'
-        n4 = h.get('N4', key)
-        tree[n1][n2][n3].append(n4)
+        n4 = h.get('N4', '')
+        if n4 and n4 not in tree[n1][n2][n3]:  # dedup na mesma N3
+            tree[n1][n2][n3].append(n4)
 
     lines = []
     for n1 in sorted(tree.keys()):
@@ -66,7 +73,7 @@ def classify_items_with_llm(
     descriptions: List[str], 
     sector: str = "Padrão", 
     client_context: str = "", 
-    custom_hierarchy: Optional[Dict] = None
+    custom_hierarchy: Optional[Union[Dict, List[Dict]]] = None
 ) -> List[Dict[str, str]]:
     """
     Classifies a list of item descriptions using Azure OpenAI.
@@ -138,7 +145,7 @@ def _call_openai_api(
     config: Dict, 
     sector: str = "Padrão", 
     client_context: str = "", 
-    custom_hierarchy: Optional[Dict] = None
+    custom_hierarchy: Optional[Union[Dict, List[Dict]]] = None
 ) -> List[Dict]:
     """Helper to call the API for a chunk of items."""
     
@@ -148,37 +155,51 @@ def _call_openai_api(
     # Construct the system message using the User's specific "Consultant" persona
     client_name = client_context if client_context else "ACNE" # Default placeholder if not provided
     
-    system_message = (
-        f"Você é um especialista em categorização de spend corporativo, com experiência em estruturas de classificação como UNSPSC e em modelos customizados de categorias de Compras. "
-        f"Sua tarefa é categorizar automaticamente cada item da base de gastos segundo o Contexto/Cliente: '{client_name}'. "
-        "ATENÇÃO: Se o contexto acima contiver 'Regras' ou instruções específicas, aplique-as com prioridade máxima sobre seu conhecimento geral.\n"
-        "utilizando uma árvore de categorias que está disponibilizada abaixo. "
-        "Caso fique em dúvida na classificação ou não conseguiu identificar na árvore, coloque 'Não Identificado' em todos os níveis (N1-N4). "
-        "Os dados serão processados para Excel, então avalie item por linha.\n\n"
-        
-        "REGRAS DE OURO PARA RACIOCÍNIO:\n"
-        "Preste extrema atenção na descrição do item, pois palavras-chave mudam radicalmente a categoria.\n"
-        "Exemplo Clássico do 'Tubo':\n"
-        "- Se 'Tubo' contiver 'PVC' -> MRO > Materiais de Construção > Produtos Sanitários e Hidráulicos\n"
-        "- Se 'Tubo' contiver 'AÇO' ou 'CARBONO' -> Industrial > Materiais Industriais > Tubulações Industriais\n\n"
-        
-        "Analise cada palavra antes de decidir. Use a lógica do modelo 'grok-4-0709' para desambiguar contextos.\n"
-        "IMPORTANTE: Retorne a resposta APENAS no formato JSON abaixo (array de objetos), sem markdown. "
-        "Exemplo de Saída:\n"
-        '[{"item": "Tubo PVC 10mm", "N1": "MRO", "N2": "Materiais de Construção", "N3": "Produtos Sanitários", "N4": "Tubos", "confidence": 0.95}, ...]'
-    )
-    
-    # Se hierarquia customizada presente, adicionar ao system message (fixo entre chamadas)
-    # e usar formato compacto (árvore agrupada) para reduzir tokens ~60-70%
+    # System message SEPARADO para hierarquia customizada vs padrão
     if custom_hierarchy:
         compact_tree = _format_hierarchy_compact(custom_hierarchy)
-        system_message += (
-            "\n\nÁRVORE DE CATEGORIAS DO CLIENTE (N1 > N2 > N3 > [N4s]):\n"
+        system_message = (
+            f"Você é um especialista em categorização de spend corporativo. "
+            f"Sua tarefa é categorizar cada item segundo o Contexto/Cliente: '{client_name}'. "
+            "ATENÇÃO: Se o contexto acima contiver 'Regras' ou instruções específicas, "
+            "aplique-as com prioridade máxima sobre seu conhecimento geral.\n\n"
+
+            "FORMATO DE SAÍDA: Retorne APENAS JSON array (sem markdown).\n"
+            'Exemplo: [{"item": "...", "N1": "...", "N2": "...", "N3": "...", "N4": "...", "confidence": 0.9}]\n\n'
+
+            f"ÁRVORE DE CATEGORIAS DO CLIENTE (N1 > N2 > N3 > [N4s]):\n"
             f"{compact_tree}\n\n"
-            "RESTRIÇÃO OBRIGATÓRIA: Classifique APENAS usando as categorias N4 listadas acima. "
-            "Copie EXATAMENTE os nomes N4 da árvore. "
-            "Se nenhuma categoria se encaixa, use 'Não Identificado' em todos os níveis (N1-N4). "
-            "NUNCA invente categorias que não estão na árvore."
+
+            "RESTRIÇÕES OBRIGATÓRIAS:\n"
+            "1. Classifique APENAS usando as categorias da árvore acima.\n"
+            "2. N1 é o PRIMEIRO nível (mais à esquerda, sem indentação). "
+            "N2 é o segundo nível (2 espaços). N3 é o terceiro (4 espaços). "
+            "N4 são os valores entre colchetes [].\n"
+            "3. Copie EXATAMENTE os nomes como aparecem na árvore.\n"
+            "4. Quando o MESMO N4 aparece sob diferentes N3, analise a descrição "
+            "para determinar o N3 correto.\n"
+            "5. Se nenhuma categoria se encaixa, use 'Não Identificado' em todos os níveis.\n"
+            "6. NUNCA invente categorias fora da árvore."
+        )
+    else:
+        system_message = (
+            f"Você é um especialista em categorização de spend corporativo, com experiência em estruturas de classificação como UNSPSC e em modelos customizados de categorias de Compras. "
+            f"Sua tarefa é categorizar automaticamente cada item da base de gastos segundo o Contexto/Cliente: '{client_name}'. "
+            "ATENÇÃO: Se o contexto acima contiver 'Regras' ou instruções específicas, aplique-as com prioridade máxima sobre seu conhecimento geral.\n"
+            "utilizando uma árvore de categorias que está disponibilizada abaixo. "
+            "Caso fique em dúvida na classificação ou não conseguiu identificar na árvore, coloque 'Não Identificado' em todos os níveis (N1-N4). "
+            "Os dados serão processados para Excel, então avalie item por linha.\n\n"
+
+            "REGRAS DE OURO PARA RACIOCÍNIO:\n"
+            "Preste extrema atenção na descrição do item, pois palavras-chave mudam radicalmente a categoria.\n"
+            "Exemplo Clássico do 'Tubo':\n"
+            "- Se 'Tubo' contiver 'PVC' -> MRO > Materiais de Construção > Produtos Sanitários e Hidráulicos\n"
+            "- Se 'Tubo' contiver 'AÇO' ou 'CARBONO' -> Industrial > Materiais Industriais > Tubulações Industriais\n\n"
+
+            "Analise cada palavra antes de decidir. Use a lógica do modelo 'grok-4-0709' para desambiguar contextos.\n"
+            "IMPORTANTE: Retorne a resposta APENAS no formato JSON abaixo (array de objetos), sem markdown. "
+            "Exemplo de Saída:\n"
+            '[{"item": "Tubo PVC 10mm", "N1": "MRO", "N2": "Materiais de Construção", "N3": "Produtos Sanitários", "N4": "Tubos", "confidence": 0.95}, ...]'
         )
 
     user_content = "Classifique os seguintes itens:\n" + "\n".join([f"- {item}" for item in items])

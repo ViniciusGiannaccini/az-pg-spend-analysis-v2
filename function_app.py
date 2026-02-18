@@ -546,19 +546,19 @@ def _parse_custom_hierarchy(status: dict):
             logging.error(f"Custom hierarchy: coluna N4 ausente. Colunas: {list(df_hier.columns)}")
             return None
 
-        # 4. Construir hierarquia com chaves padronizadas (N1, N2, N3, N4)
-        custom_hierarchy = {}
+        # 4. Construir hierarquia como LISTA (preserva N4s duplicados como "Materiais OEM" em múltiplas marcas)
+        custom_hierarchy = []
         for _, row in df_hier.iterrows():
             n4 = str(row.get('N4', '')).strip()
             if n4 and n4.upper() != 'NAN':
-                custom_hierarchy[n4.lower()] = {
+                custom_hierarchy.append({
                     'N1': str(row.get('N1', '')).strip() if pd.notna(row.get('N1')) else '',
                     'N2': str(row.get('N2', '')).strip() if pd.notna(row.get('N2')) else '',
                     'N3': str(row.get('N3', '')).strip() if pd.notna(row.get('N3')) else '',
                     'N4': n4,
-                }
+                })
 
-        logging.info(f"Custom hierarchy parsed: {len(custom_hierarchy)} N4 categories")
+        logging.info(f"Custom hierarchy parsed: {len(custom_hierarchy)} entries (list format, preserves duplicates)")
         return custom_hierarchy if custom_hierarchy else None
     except Exception as e:
         logging.error(f"Failed to parse custom hierarchy: {e}")

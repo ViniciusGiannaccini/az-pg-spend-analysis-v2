@@ -1,7 +1,7 @@
 
 import logging
 import pandas as pd
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 import json
 import time
 
@@ -15,7 +15,7 @@ def process_dataframe_chunk(
     sector: str,
     desc_column: str,
     hierarchy: Optional[Dict] = None,
-    custom_hierarchy: Optional[Dict] = None,
+    custom_hierarchy: Optional[Union[Dict, List[Dict]]] = None,
     client_context: str = "",
     use_llm: bool = True
 ) -> List[Dict]:
