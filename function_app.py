@@ -496,6 +496,24 @@ def _find_next_chunk(job_info: dict):
     return None
 
 
+def _find_next_chunks(job_info: dict, max_count: int = 1, exclude: set = None) -> list:
+    """Retorna até max_count índices de chunks não processados (excluindo já atribuídos)."""
+    if exclude is None:
+        exclude = set()
+    job_dir = job_info["job_dir"]
+    chunks = []
+    for i in range(job_info["total_chunks"]):
+        if len(chunks) >= max_count:
+            break
+        if i in exclude:
+            continue
+        chunk_file = os.path.join(job_dir, f"chunk_{i}.json")
+        result_file = os.path.join(job_dir, f"result_{i}.json")
+        if os.path.exists(chunk_file) and not os.path.exists(result_file):
+            chunks.append(i)
+    return chunks
+
+
 def _parse_custom_hierarchy(status: dict):
     """Decodifica custom_hierarchy_b64 do status do job, se presente."""
     import pandas as pd
@@ -516,7 +534,8 @@ def _parse_custom_hierarchy(status: dict):
 
 
 def _process_single_chunk(job_info: dict, chunk_index: int) -> None:
-    """Processa um único chunk de um job e salva o resultado."""
+    """Processa um único chunk de um job e salva o resultado.
+    NÃO atualiza status.json (chamador deve usar _update_job_progress após batch paralelo)."""
     import pandas as pd
     from src.core_classification import process_dataframe_chunk
 
@@ -546,14 +565,18 @@ def _process_single_chunk(job_info: dict, chunk_index: int) -> None:
     with open(result_file, "w") as rf:
         json.dump(results, rf)
 
-    # Atualizar progresso no status.json
+
+def _update_job_progress(job_info: dict) -> None:
+    """Atualiza processed_chunks no status.json. Chamar FORA de contexto paralelo."""
+    job_dir = job_info["job_dir"]
+    total_chunks = job_info["total_chunks"]
     processed_so_far = sum(
         1 for j in range(total_chunks)
         if os.path.exists(os.path.join(job_dir, f"result_{j}.json"))
     )
-    status["processed_chunks"] = processed_so_far
+    job_info["status"]["processed_chunks"] = processed_so_far
     with open(job_info["status_path"], "w") as f:
-        json.dump(status, f)
+        json.dump(job_info["status"], f)
 
 
 def _consolidate_job(job_info: dict) -> None:
@@ -660,36 +683,66 @@ def ProcessTaxonomyWorker(myTimer: func.TimerRequest) -> None:
 
     logging.info(f"[Worker] {len(active_jobs)} job(s) ativo(s): {[j['job_id'][:8] for j in active_jobs]}")
 
-    # 3. Round-robin: processar 1 chunk por job, ciclando até time budget esgotar
+    # 3. Round-robin paralelo: até MAX_PARALLEL_CHUNKS chunks simultâneos entre todos os jobs
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    MAX_PARALLEL_CHUNKS = 5
     MAX_PROCESSING_TIME = 20 * 60  # 20 minutos
     worker_start_time = time.time()
-    made_progress = True
 
-    while made_progress:
-        made_progress = False
-        for job_info in active_jobs:
-            # Verificar time budget antes de cada chunk
-            elapsed = time.time() - worker_start_time
-            if elapsed > MAX_PROCESSING_TIME:
-                logging.info(f"[Worker] Time budget atingido ({elapsed:.0f}s). Jobs continuam no próximo ciclo.")
-                made_progress = False
-                break
+    while True:
+        elapsed = time.time() - worker_start_time
+        if elapsed > MAX_PROCESSING_TIME:
+            logging.info(f"[Worker] Time budget atingido ({elapsed:.0f}s). Jobs continuam no próximo ciclo.")
+            break
 
-            # Pular jobs que já falharam neste ciclo
-            if job_info["status"].get("status") == "ERROR":
-                continue
+        # Coletar até MAX_PARALLEL_CHUNKS via round-robin justo entre jobs
+        batch = []
+        pending = [j for j in active_jobs if j["status"].get("status") != "ERROR"]
+        assigned = {j["job_id"]: set() for j in pending}
 
-            next_chunk = _find_next_chunk(job_info)
-            if next_chunk is not None:
+        # Round-robin: 1 chunk por job por rodada, repetir até preencher batch
+        while len(batch) < MAX_PARALLEL_CHUNKS and pending:
+            next_round = []
+            for job in pending:
+                if len(batch) >= MAX_PARALLEL_CHUNKS:
+                    break
+                jid = job["job_id"]
+                available = _find_next_chunks(job, max_count=1, exclude=assigned[jid])
+                if available:
+                    batch.append((job, available[0]))
+                    assigned[jid].add(available[0])
+                    next_round.append(job)
+            pending = next_round
+
+        if not batch:
+            break
+
+        logging.info(f"[Worker] Processando {len(batch)} chunk(s) em paralelo: "
+                     f"{[(j['job_id'][:8], c) for j, c in batch]}")
+
+        # Processar batch em paralelo
+        with ThreadPoolExecutor(max_workers=MAX_PARALLEL_CHUNKS) as executor:
+            futures = {
+                executor.submit(_process_single_chunk, job, idx): (job, idx)
+                for job, idx in batch
+            }
+            for future in as_completed(futures):
+                job, idx = futures[future]
                 try:
-                    _process_single_chunk(job_info, next_chunk)
-                    made_progress = True
+                    future.result()
                 except Exception as e:
-                    logging.error(f"[Worker] Erro no Job {job_info['job_id']} chunk {next_chunk}: {e}")
-                    job_info["status"]["status"] = "ERROR"
-                    job_info["status"]["error"] = str(e)
-                    with open(job_info["status_path"], "w") as f:
-                        json.dump(job_info["status"], f)
+                    logging.error(f"[Worker] Erro no Job {job['job_id']} chunk {idx}: {e}")
+                    job["status"]["status"] = "ERROR"
+                    job["status"]["error"] = str(e)
+                    with open(job["status_path"], "w") as f:
+                        json.dump(job["status"], f)
+
+        # Atualizar progresso de todos os jobs tocados (sequencial, sem race condition)
+        touched = set(j["job_id"] for j, _ in batch)
+        for job in active_jobs:
+            if job["job_id"] in touched and job["status"].get("status") != "ERROR":
+                _update_job_progress(job)
 
     # 4. Consolidar jobs que completaram todos os chunks
     for job_info in active_jobs:

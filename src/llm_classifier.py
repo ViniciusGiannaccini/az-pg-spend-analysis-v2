@@ -59,7 +59,7 @@ def get_azure_openai_config():
     return {
         "endpoint": os.getenv("GROK_API_ENDPOINT", "https://api.x.ai/v1"),
         "api_key": os.getenv("GROK_API_KEY", ""),
-        "deployment": os.getenv("GROK_MODEL_NAME", "grok-4-1-fast-reasoning")
+        "deployment": os.getenv("GROK_MODEL_NAME", "grok-4-1-fast-non-reasoning")
     }
 
 def classify_items_with_llm(
@@ -200,7 +200,8 @@ def _call_openai_api(
         logging.warning("CRITICAL: Grok API Key missing or too short!")
 
     import time
-    max_retries = 2
+    max_retries = 3
+    response = None
     for attempt in range(max_retries + 1):
         try:
             logging.info(f"Sending request to Grok with input size {len(items)} (Attempt {attempt + 1})")
@@ -211,15 +212,23 @@ def _call_openai_api(
                     "Authorization": f"Bearer {config['api_key']}"
                 },
                 json=payload,
-                timeout=90 # Increased timeout
+                timeout=90
             )
-            
+
             if response.status_code == 200:
                 break
-            
+
+            # Rate limit: respeitar Retry-After header
+            if response.status_code == 429:
+                retry_after = int(response.headers.get("Retry-After", 5))
+                logging.warning(f"Rate limited (429). Waiting {retry_after}s before retry...")
+                if attempt < max_retries:
+                    time.sleep(retry_after)
+                    continue
+
             logging.error(f"Grok API Error {response.status_code} (Attempt {attempt + 1}): {response.text}")
             if attempt < max_retries:
-                time.sleep(2 ** attempt) # Exponential backoff
+                time.sleep(2 ** attempt)
         except Exception as e:
             logging.error(f"Exception calling Azure OpenAI (Attempt {attempt + 1}): {e}")
             if attempt < max_retries:
@@ -228,8 +237,9 @@ def _call_openai_api(
                 return [_create_manual_fallback(item) for item in items]
 
     try:
-        if response.status_code != 200:
-            return [_create_manual_fallback(item, f"Erro {response.status_code} após retentativas") for item in items]
+        if response is None or response.status_code != 200:
+            code = response.status_code if response else "N/A"
+            return [_create_manual_fallback(item, f"Erro {code} após retentativas") for item in items]
             
         data = response.json()
         content = data['choices'][0]['message']['content']
