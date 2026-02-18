@@ -453,7 +453,8 @@ def _cleanup_stale_jobs(jobs_root: str) -> None:
 
 
 def _get_active_jobs(jobs_root: str) -> list:
-    """Coleta jobs ativos (PENDING/PROCESSING) e marca PENDING como PROCESSING."""
+    """Coleta jobs ativos (PENDING/PROCESSING), marca PENDING como PROCESSING,
+    e parseia custom_hierarchy UMA VEZ por job (evita decodificar base64+Excel a cada chunk)."""
     active = []
     for job_id in os.listdir(jobs_root):
         job_dir = os.path.join(jobs_root, job_id)
@@ -469,12 +470,15 @@ def _get_active_jobs(jobs_root: str) -> list:
                 status["status"] = "PROCESSING"
                 with open(status_path, "w") as f:
                     json.dump(status, f)
+            # Parsear hierarquia uma vez por job
+            custom_hierarchy = _parse_custom_hierarchy(status)
             active.append({
                 "job_id": job_id,
                 "job_dir": job_dir,
                 "status_path": status_path,
                 "status": status,
                 "total_chunks": status["total_chunks"],
+                "custom_hierarchy": custom_hierarchy,
             })
         except Exception as e:
             logging.error(f"[Worker] Erro ao ler job {job_id}: {e}")
@@ -528,7 +532,8 @@ def _process_single_chunk(job_info: dict, chunk_index: int) -> None:
 
     df_chunk = pd.read_json(chunk_file, orient="records")
 
-    custom_hierarchy = _parse_custom_hierarchy(status)
+    # Usa hierarquia já parseada no _get_active_jobs (evita re-decodificar base64+Excel por chunk)
+    custom_hierarchy = job_info.get("custom_hierarchy")
 
     results = process_dataframe_chunk(
         df_chunk=df_chunk,

@@ -156,10 +156,11 @@ def classify_hybrid(
                 source="Deferred to Batch LLM"
             )
         # Direct LLM call (only when use_llm_fallback=True, i.e. not in batch mode)
+        _UNCLASSIFIED = {"Não Identificado", "Nao Identificado", ""}
         llm_results = classify_items_with_llm([description], sector=sector, client_context=client_context, custom_hierarchy=hierarchy)
         if llm_results:
             llm_res = llm_results[0]
-            if llm_res.get("N1"):
+            if llm_res.get("N1") and llm_res.get("N1") not in _UNCLASSIFIED:
                  return ClassificationResult(
                     status="Único",
                     n4=llm_res.get("N4", ""),
@@ -291,10 +292,11 @@ def classify_hybrid(
     
     # Decision 4: Try LLM (fallback for non-Padrão sectors)
     if use_llm_fallback:
+        _UNCLASSIFIED_D4 = {"Não Identificado", "Nao Identificado", ""}
         llm_results = classify_items_with_llm([description], sector=sector, client_context=client_context, custom_hierarchy=hierarchy)
         if llm_results:
             llm_res = llm_results[0]
-            if llm_res.get("N1"):
+            if llm_res.get("N1") and llm_res.get("N1") not in _UNCLASSIFIED_D4:
                  return ClassificationResult(
                     status="Único", # LLM usually returns one answer
                     n4=llm_res.get("N4", ""),

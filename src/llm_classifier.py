@@ -8,6 +8,7 @@ import json
 import logging
 import requests
 from typing import List, Dict, Any, Optional
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # UNSPSC Segment/Family definitions for prompt context
@@ -21,6 +22,37 @@ Exemplos:
 - "Serviço de Limpeza Predial" -> N1: "Serviços Prediais", N2: "Limpeza e Manutenção"
 - "Consultoria Financeira" -> N1: "Serviços Financeiros", N2: "Consultoria"
 """
+
+def _format_hierarchy_compact(custom_hierarchy: Dict) -> str:
+    """
+    Formata hierarquia customizada em formato árvore compacto.
+    Reduz ~60-70% dos tokens comparado com o formato linear (N1 > N2 > N3 > N4).
+
+    Input: {"tubos pvc": {"N1": "MRO", "N2": "Mat. Construção", "N3": "Prod. Sanitários", "N4": "Tubos PVC"}, ...}
+    Output:
+        MRO:
+          Mat. Construção:
+            Prod. Sanitários: [Tubos PVC, Conexões]
+            Ferramentas: [Chaves]
+    """
+    tree = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+    for key, h in custom_hierarchy.items():
+        n1 = h.get('N1', '') or 'Outros'
+        n2 = h.get('N2', '') or 'Outros'
+        n3 = h.get('N3', '') or 'Outros'
+        n4 = h.get('N4', key)
+        tree[n1][n2][n3].append(n4)
+
+    lines = []
+    for n1 in sorted(tree.keys()):
+        lines.append(f"{n1}:")
+        for n2 in sorted(tree[n1].keys()):
+            lines.append(f"  {n2}:")
+            for n3 in sorted(tree[n1][n2].keys()):
+                n4s = sorted(tree[n1][n2][n3])
+                lines.append(f"    {n3}: [{', '.join(n4s)}]")
+    return "\n".join(lines)
+
 
 def get_azure_openai_config():
     """Retrieves Azure OpenAI config from environment variables."""
@@ -136,19 +168,20 @@ def _call_openai_api(
         '[{"item": "Tubo PVC 10mm", "N1": "MRO", "N2": "Materiais de Construção", "N3": "Produtos Sanitários", "N4": "Tubos", "confidence": 0.95}, ...]'
     )
     
-    # If hierarchy is present, format as compact list (much fewer tokens than raw JSON)
-    hierarchy_context = ""
+    # Se hierarquia customizada presente, adicionar ao system message (fixo entre chamadas)
+    # e usar formato compacto (árvore agrupada) para reduzir tokens ~60-70%
     if custom_hierarchy:
-        hierarchy_lines = []
-        for key, h in custom_hierarchy.items():
-            n1 = h.get('N1', '')
-            n2 = h.get('N2', '')
-            n3 = h.get('N3', '')
-            n4 = h.get('N4', key)
-            hierarchy_lines.append(f"- {n1} > {n2} > {n3} > {n4}")
-        hierarchy_context = f"\nCategorias disponíveis (N1 > N2 > N3 > N4):\n" + "\n".join(hierarchy_lines)
-    
-    user_content = f"Classifique os seguintes itens{hierarchy_context}:\n" + "\n".join([f"- {item}" for item in items])
+        compact_tree = _format_hierarchy_compact(custom_hierarchy)
+        system_message += (
+            "\n\nÁRVORE DE CATEGORIAS DO CLIENTE (N1 > N2 > N3 > [N4s]):\n"
+            f"{compact_tree}\n\n"
+            "RESTRIÇÃO OBRIGATÓRIA: Classifique APENAS usando as categorias N4 listadas acima. "
+            "Copie EXATAMENTE os nomes N4 da árvore. "
+            "Se nenhuma categoria se encaixa, use 'Não Identificado' em todos os níveis (N1-N4). "
+            "NUNCA invente categorias que não estão na árvore."
+        )
+
+    user_content = "Classifique os seguintes itens:\n" + "\n".join([f"- {item}" for item in items])
 
     payload = {
         "model": config["deployment"],

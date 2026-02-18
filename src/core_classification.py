@@ -2,6 +2,7 @@
 import logging
 import pandas as pd
 from typing import Dict, List, Optional, Tuple, Any
+from difflib import get_close_matches
 import json
 import base64
 import io
@@ -11,7 +12,7 @@ import time
 from src.ml_classifier import load_model_for_sector, predict_batch
 from src.hybrid_classifier import classify_hybrid
 from src.llm_classifier import classify_items_with_llm
-from src.taxonomy_mapper import apply_custom_hierarchy, resolve_unmatched_with_llm
+from src.taxonomy_mapper import apply_custom_hierarchy
 
 def process_dataframe_chunk(
     df_chunk: pd.DataFrame,
@@ -90,9 +91,10 @@ def process_dataframe_chunk(
                     custom_hierarchy=effective_hierarchy
                 )
                 
-                # Merge results
+                # Merge results (skip LLM failures that return "Não Identificado")
+                _UNCLASSIFIED = {"Não Identificado", "Nao Identificado", ""}
                 for i, res in enumerate(llm_batch_results):
-                    if res.get("N1"):
+                    if res.get("N1") and res.get("N1") not in _UNCLASSIFIED:
                         target_idx = unclassified_indices[i]
                         chunk_results[target_idx].update({
                             "N1": res.get("N1", ""),
@@ -106,53 +108,59 @@ def process_dataframe_chunk(
             except Exception as e:
                 logging.error(f"[Chunk] LLM batch failed: {e}")
 
-        # 4. Third Pass: Semantic Mapping (Standard -> Custom)
-        if custom_hierarchy and use_llm:
-            # Collect unique N4s from results that are "Único" but not in custom hierarchy
-            standard_n4s = set()
+        # 4. Third Pass: Validação local contra hierarquia customizada (sem LLM)
+        # O prompt restritivo na Opt 2 garante que o LLM já retorna N4s da hierarquia.
+        # Aqui apenas validamos: exact match → fuzzy match → Nenhum.
+        if custom_hierarchy:
+            hierarchy_keys = list(custom_hierarchy.keys())  # lowercase keys
+            # Cache local de fuzzy matches para não recalcular
+            fuzzy_cache = {}
+
             for res in chunk_results:
-                if res['status'] == 'Único' and res.get('N4'):
-                    n4_key = res['N4'].lower().strip()
-                    if n4_key not in custom_hierarchy:
-                        standard_n4s.add(res['N4'])
-            
-            if standard_n4s:
-                logging.info(f"[Chunk] Mapping {len(standard_n4s)} standard terms to custom hierarchy...")
-                semantic_map = resolve_unmatched_with_llm(list(standard_n4s), custom_hierarchy)
-                
-                # Re-apply hierarchy with map
-                for res in chunk_results:
-                    top_candidates = []
-                    if res.get('N4'):
-                        top_candidates.append({'N4': res['N4']})
-                    if res.get('ambiguous_options'):
-                        for opt in res['ambiguous_options']:
-                            top_candidates.append({'N4': opt})
-                            
-                    custom_res, matched_n4 = apply_custom_hierarchy(
-                        top_candidates, 
-                        custom_hierarchy, 
-                        semantic_map=semantic_map
-                    )
-                    
-                    if custom_res:
-                        res.update({
-                            "N1": custom_res.get('N1', ''),
-                            "N2": custom_res.get('N2', ''),
-                            "N3": custom_res.get('N3', ''),
-                            "N4": custom_res.get('N4', ''),
-                            "status": "Único",
-                            "classification_source": f"Custom (via {res.get('classification_source', '')})"
-                        })
-                    else:
-                        # Fallback to Nenhum if strict mapping
-                        if res['status'] == 'Único':
-                            orig_n4 = res.get('N4', '')
-                            res.update({
-                                "N1": "", "N2": "", "N3": "", "N4": "",
-                                "status": "Nenhum",
-                                "matched_terms": [f'Standard: {orig_n4}'] if orig_n4 else []
-                            })
+                if res['status'] != 'Único' or not res.get('N4'):
+                    continue
+
+                n4_key = res['N4'].lower().strip()
+
+                # 4a. Exact match na hierarquia
+                if n4_key in custom_hierarchy:
+                    h = custom_hierarchy[n4_key]
+                    res.update({
+                        "N1": h.get('N1', ''),
+                        "N2": h.get('N2', ''),
+                        "N3": h.get('N3', ''),
+                        "N4": h.get('N4', res['N4']),
+                        "classification_source": f"Custom (via {res.get('classification_source', '')})"
+                    })
+                    continue
+
+                # 4b. Fuzzy match (difflib, cutoff=0.6)
+                if n4_key not in fuzzy_cache:
+                    matches = get_close_matches(n4_key, hierarchy_keys, n=1, cutoff=0.6)
+                    fuzzy_cache[n4_key] = matches[0] if matches else None
+
+                matched_key = fuzzy_cache[n4_key]
+                if matched_key:
+                    h = custom_hierarchy[matched_key]
+                    res.update({
+                        "N1": h.get('N1', ''),
+                        "N2": h.get('N2', ''),
+                        "N3": h.get('N3', ''),
+                        "N4": h.get('N4', ''),
+                        "classification_source": f"Custom/fuzzy (via {res.get('classification_source', '')})"
+                    })
+                else:
+                    # Sem match — marca como Nenhum
+                    orig_n4 = res.get('N4', '')
+                    res.update({
+                        "N1": "", "N2": "", "N3": "", "N4": "",
+                        "status": "Nenhum",
+                        "matched_terms": [f'Standard: {orig_n4}'] if orig_n4 else []
+                    })
+
+            matched = sum(1 for r in chunk_results if r['status'] == 'Único' and r.get('classification_source', '').startswith('Custom'))
+            total_unique = sum(1 for r in chunk_results if r['status'] == 'Único' or (r.get('matched_terms') and 'Standard:' in str(r.get('matched_terms', ''))))
+            logging.info(f"[Chunk] Hierarchy validation: {matched}/{total_unique} mapped (fuzzy cache: {len(fuzzy_cache)} entries)")
 
     # Cleanup temporary fields
     for res in chunk_results:

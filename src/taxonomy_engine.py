@@ -577,8 +577,12 @@ def generate_analytics(df_items: pd.DataFrame) -> Dict[str, Any]:
             analytics[f"pareto_{level}"] = []
             continue
 
-        # Filter out empty or None
-        df_valid = df_items[df_items[level].notna() & (df_items[level] != "")]
+        # Filter out empty, None, and "Não Identificado" (unclassified placeholder)
+        df_valid = df_items[
+            df_items[level].notna() &
+            (df_items[level] != "") &
+            (df_items[level] != "Não Identificado")
+        ]
         
         if not df_valid.empty:
             # Count frequency
