@@ -472,6 +472,10 @@ def _get_active_jobs(jobs_root: str) -> list:
                     json.dump(status, f)
             # Parsear hierarquia uma vez por job
             custom_hierarchy = _parse_custom_hierarchy(status)
+            hierarchy_lookup = None
+            if custom_hierarchy:
+                from src.hierarchy_validator import HierarchyLookup
+                hierarchy_lookup = HierarchyLookup(custom_hierarchy)
             active.append({
                 "job_id": job_id,
                 "job_dir": job_dir,
@@ -479,6 +483,7 @@ def _get_active_jobs(jobs_root: str) -> list:
                 "status": status,
                 "total_chunks": status["total_chunks"],
                 "custom_hierarchy": custom_hierarchy,
+                "hierarchy_lookup": hierarchy_lookup,
             })
         except Exception as e:
             logging.error(f"[Worker] Erro ao ler job {job_id}: {e}")
@@ -591,7 +596,8 @@ def _process_single_chunk(job_info: dict, chunk_index: int) -> None:
         sector=status["sector"],
         desc_column=status["desc_column"],
         custom_hierarchy=custom_hierarchy,
-        client_context=status.get("client_context", "")
+        client_context=status.get("client_context", ""),
+        hierarchy_lookup=job_info.get("hierarchy_lookup")
     )
 
     with open(result_file, "w") as rf:

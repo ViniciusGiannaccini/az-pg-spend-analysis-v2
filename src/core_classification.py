@@ -17,7 +17,8 @@ def process_dataframe_chunk(
     hierarchy: Optional[Dict] = None,
     custom_hierarchy: Optional[Union[Dict, List[Dict]]] = None,
     client_context: str = "",
-    use_llm: bool = True
+    use_llm: bool = True,
+    hierarchy_lookup=None
 ) -> List[Dict]:
     """
     Process a chunk of dataframe rows using the hybrid classification pipeline.
@@ -104,11 +105,15 @@ def process_dataframe_chunk(
             except Exception as e:
                 logging.error(f"[Chunk] LLM batch failed: {e}")
 
-        # Pass 4 removido: quando custom_hierarchy está presente, o LLM já recebe
-        # a árvore inteira no prompt com instrução restritiva. A validação local
-        # era redundante e causava dois problemas:
-        # - N4s duplicados (ex: "Materiais OEM" em 16 marcas) sobrescreviam N3 correto
-        # - N4s com grafia levemente diferente eram rejeitados como "Nenhum"
+        # Pass 4: Validação e correção de hierarquia (pós-processamento genérico)
+        if custom_hierarchy and hierarchy_lookup:
+            from src.hierarchy_validator import validate_and_correct
+            chunk_results, val_stats = validate_and_correct(
+                chunk_results, custom_hierarchy, lookup=hierarchy_lookup
+            )
+            logging.info(f"[Chunk] Hierarchy validation: exact={val_stats['exact_match']}, "
+                         f"shift={val_stats['level_shift']}, fuzzy={val_stats['partial_fuzzy']}, "
+                         f"n4rev={val_stats['n4_reverse']}, nomatch={val_stats['no_match']}")
 
     # Cleanup temporary fields
     for res in chunk_results:

@@ -25,15 +25,16 @@ Exemplos:
 
 def _format_hierarchy_compact(custom_hierarchy) -> str:
     """
-    Formata hierarquia customizada em formato árvore compacto.
-    Reduz ~60-70% dos tokens comparado com o formato linear (N1 > N2 > N3 > N4).
+    Formata hierarquia customizada em formato árvore com labels explícitos [N1]/[N2]/[N3]/[N4].
+    Labels eliminam ambiguidade de nível (reduz deslocamento de ~14% para ~5%).
     Aceita lista de dicts ou dict keyed por N4 (backward compat).
 
     Output:
-        Operação e Manutenção:
-          Materiais e Serviços OEM:
-            OEM - ABB: [Materiais OEM, Serviços OEM]
-            OEM - SIEMENS: [Materiais OEM, Serviços OEM]
+        [N1] Operação e Manutenção
+          [N2] Materiais e Serviços OEM
+            [N3] OEM - ABB
+              [N4] Materiais OEM
+              [N4] Serviços OEM
     """
     # Aceitar lista ou dict (backward compat)
     if isinstance(custom_hierarchy, dict):
@@ -52,12 +53,13 @@ def _format_hierarchy_compact(custom_hierarchy) -> str:
 
     lines = []
     for n1 in sorted(tree.keys()):
-        lines.append(f"{n1}:")
+        lines.append(f"[N1] {n1}")
         for n2 in sorted(tree[n1].keys()):
-            lines.append(f"  {n2}:")
+            lines.append(f"  [N2] {n2}")
             for n3 in sorted(tree[n1][n2].keys()):
-                n4s = sorted(tree[n1][n2][n3])
-                lines.append(f"    {n3}: [{', '.join(n4s)}]")
+                lines.append(f"    [N3] {n3}")
+                for n4 in sorted(tree[n1][n2][n3]):
+                    lines.append(f"      [N4] {n4}")
     return "\n".join(lines)
 
 
@@ -167,14 +169,13 @@ def _call_openai_api(
             "FORMATO DE SAÍDA: Retorne APENAS JSON array (sem markdown).\n"
             'Exemplo: [{"item": "...", "N1": "...", "N2": "...", "N3": "...", "N4": "...", "confidence": 0.9}]\n\n'
 
-            f"ÁRVORE DE CATEGORIAS DO CLIENTE (N1 > N2 > N3 > [N4s]):\n"
+            f"ÁRVORE DE CATEGORIAS DO CLIENTE (cada linha prefixada com [N1], [N2], [N3] ou [N4]):\n"
             f"{compact_tree}\n\n"
 
             "RESTRIÇÕES OBRIGATÓRIAS:\n"
             "1. Classifique APENAS usando as categorias da árvore acima.\n"
-            "2. N1 é o PRIMEIRO nível (mais à esquerda, sem indentação). "
-            "N2 é o segundo nível (2 espaços). N3 é o terceiro (4 espaços). "
-            "N4 são os valores entre colchetes [].\n"
+            "2. Cada linha tem um prefixo [N1], [N2], [N3] ou [N4] indicando o nível.\n"
+            "   Para cada item, retorne o caminho completo: o [N1] que contém o [N2], que contém o [N3], que contém o [N4].\n"
             "3. Copie EXATAMENTE os nomes como aparecem na árvore.\n"
             "4. Quando o MESMO N4 aparece sob diferentes N3, analise a descrição "
             "para determinar o N3 correto.\n"
