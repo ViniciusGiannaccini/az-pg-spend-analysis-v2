@@ -179,8 +179,13 @@ def validate_and_correct(
             stats["n4_reverse"] += 1
             continue
 
-        # Step E: No match - CONSERVADOR: manter resultado do LLM
-        res["classification_source"] = source + " [unvalidated]"
+        # Step E: No match - zerar tudo para "Não Identificado" + status "Nenhum"
+        res["N1"] = "Não Identificado"
+        res["N2"] = "Não Identificado"
+        res["N3"] = "Não Identificado"
+        res["N4"] = "Não Identificado"
+        res["status"] = "Nenhum"
+        res["classification_source"] = source + " [no-match]"
         stats["no_match"] += 1
 
     return chunk_results, stats
@@ -264,6 +269,7 @@ def _try_n4_reverse(
     # Múltiplos paths → pontuar por overlap com N1/N2/N3 do LLM
     best_score = -1
     best_path = None
+    tied = False
     for p_n1, p_n2, p_n3 in paths:
         score = 0
         if p_n1 == n1l:
@@ -275,10 +281,14 @@ def _try_n4_reverse(
         if score > best_score:
             best_score = score
             best_path = (p_n1, p_n2, p_n3)
+            tied = False
+        elif score == best_score:
+            tied = True
 
-    if best_path and best_score > 0:
-        _apply_canonical(res, best_path[0], best_path[1], best_path[2], n4l, lookup)
-        res["classification_source"] = source + " [n4-reverse]"
-        return True
+    # Se houve empate, não temos info suficiente para desambiguar → rejeitar
+    if tied or not best_path or best_score == 0:
+        return False
 
-    return False
+    _apply_canonical(res, best_path[0], best_path[1], best_path[2], n4l, lookup)
+    res["classification_source"] = source + " [n4-reverse]"
+    return True

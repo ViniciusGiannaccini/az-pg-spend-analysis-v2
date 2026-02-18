@@ -68,7 +68,7 @@ def get_azure_openai_config():
     return {
         "endpoint": os.getenv("GROK_API_ENDPOINT", "https://api.x.ai/v1"),
         "api_key": os.getenv("GROK_API_KEY", ""),
-        "deployment": os.getenv("GROK_MODEL_NAME", "grok-4-1-fast-non-reasoning")
+        "deployment": os.getenv("GROK_MODEL_NAME", "grok-4-1-fast-reasoning")
     }
 
 def classify_items_with_llm(
@@ -103,7 +103,7 @@ def classify_items_with_llm(
     results = [None] * len(descriptions)
     
     # Process in larger batches (50 items) and use parallel threads
-    chunk_size = 40 # Grok-4 handles 40 items per prompt; halves API calls vs 20
+    chunk_size = 100 # Batch grande melhora consistência (itens similares no mesmo contexto)
     chunks = []
     for i in range(0, len(descriptions), chunk_size):
         chunks.append((i, descriptions[i:i + chunk_size]))
