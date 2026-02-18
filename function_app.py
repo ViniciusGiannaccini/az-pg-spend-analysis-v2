@@ -653,6 +653,11 @@ def _consolidate_job(job_info: dict) -> None:
         original_df = pd.DataFrame(original_chunks)
         cols_to_drop = [c for c in original_df.columns if c.startswith('_')]
         original_df.drop(columns=cols_to_drop, errors='ignore', inplace=True)
+        # Remover colunas do original que colidem com resultados (evita duplicate labels)
+        overlap = [c for c in original_df.columns if c in results_df.columns]
+        if overlap:
+            logging.info(f"[Consolidate] Dropping overlapping columns from original: {overlap}")
+            original_df.drop(columns=overlap, inplace=True)
         final_df = pd.concat([original_df.reset_index(drop=True), results_df.reset_index(drop=True)], axis=1)
     else:
         final_df = results_df
@@ -794,7 +799,8 @@ def ProcessTaxonomyWorker(myTimer: func.TimerRequest) -> None:
             try:
                 _consolidate_job(job_info)
             except Exception as e:
-                logging.error(f"[Worker] Erro ao consolidar Job {job_info['job_id']}: {e}")
+                import traceback
+                logging.error(f"[Worker] Erro ao consolidar Job {job_info['job_id']}: {e}\n{traceback.format_exc()}")
                 job_info["status"]["status"] = "ERROR"
                 job_info["status"]["error"] = f"Consolidation error: {e}"
                 with open(job_info["status_path"], "w") as f:
