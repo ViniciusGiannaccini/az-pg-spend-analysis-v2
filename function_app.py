@@ -319,6 +319,9 @@ def SubmitTaxonomyJob(req: func.HttpRequest) -> func.HttpResponse:
             "dictionary_content_b64": req_body.get("dictionaryContent")
         }
         
+        # Ordenar por descrição para agrupar itens similares no mesmo batch LLM
+        df = df.sort_values(by=desc_col, key=lambda s: s.str.lower().fillna(""), na_position="last").reset_index(drop=True)
+
         # Chunking Strategy (e.g., 500 rows per chunk)
         CHUNK_SIZE = 500
         num_chunks = math.ceil(len(df) / CHUNK_SIZE)
@@ -661,6 +664,13 @@ def _consolidate_job(job_info: dict) -> None:
         final_df = pd.concat([original_df.reset_index(drop=True), results_df.reset_index(drop=True)], axis=1)
     else:
         final_df = results_df
+
+    # Preencher linhas em branco com "Não Identificado"
+    for col in ["N1", "N2", "N3", "N4"]:
+        if col in final_df.columns:
+            final_df[col] = final_df[col].fillna("Não Identificado").replace("", "Não Identificado")
+    if "status" in final_df.columns:
+        final_df["status"] = final_df["status"].fillna("Nenhum").replace("", "Nenhum")
 
     # Analytics e Summary
     analytics = generate_analytics(final_df)
